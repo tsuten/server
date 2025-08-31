@@ -1,0 +1,20 @@
+{
+  "type": "module",
+  "dependencies": {
+    "fastify": "^5.5.0",
+    "socket.io": "^4.8.1",
+    "mongoose": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0",
+    "tsx": "^4.6.0"
+  },
+  "scripts": {
+    "start": "tsx index.ts",
+    "dev": "tsx --watch index.ts",
+    "build": "tsc",
+    "start:js": "fastify start index.js"
+  }
+}
