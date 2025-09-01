@@ -1,5 +1,8 @@
 import { Socket } from "socket.io";
+import { AuthEntity } from './auth.js';
 
 export interface CustomSocket extends Socket {
-    username?: string
-  }
+    token?: string;
+    username?: string;
+    user?: AuthEntity;
+}

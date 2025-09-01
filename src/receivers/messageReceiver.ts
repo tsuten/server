@@ -1,4 +1,5 @@
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
+import { CustomSocket } from '../types/socket.js';
 import { BaseReceiver, ReceiverOptions } from '../base/BaseReceiver.js';
 import { messageOperation } from '../operations/MessageOperation.js';
 import { messageSchema } from '../schemas/MessageSchema.js';
@@ -18,8 +19,9 @@ import {
 export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateData, MessageUpdateData> {
   protected operation: MessageOperationInterface;
   protected logger = createLogger(LogCategory.RECEIVER, 'MessageReceiver');
+  protected declare socket: CustomSocket; // 型を明示的に指定
   
-  constructor(io: Server, socket: Socket, options: ReceiverOptions = {}) {
+  constructor(io: Server, socket: CustomSocket, options: ReceiverOptions = {}) {
     super(io, socket, messageOperation, options);
     this.operation = messageOperation;
   }
@@ -53,13 +55,21 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
   private async handleSendMessage(data: any, callback?: (response: any) => void): Promise<void> {
     this.logger.debug('handleSendMessage called', data);
     
+    // 認証されたユーザー情報を使用してデータを補完
+    if (!this.socket.username || !this.socket.user) {
+      const errorResponse = this.createErrorResponse('User not authenticated');
+      this.logger.warn('Unauthenticated user tried to send message', { socketId: this.socket.id });
+      this.socket.emit('messageError', errorResponse);
+      if (callback) callback(errorResponse);
+      return;
+    }
+
     await this.safeExecute(async () => {
       this.logger.info('Starting message creation');
       
-      // Socket接続時のusernameを使用してデータを補完
       const messageData = {
         ...data,
-        username: data.username || this.socket.handshake.query.username
+        username: this.socket.username // 認証されたユーザー名を使用
       };
       
       this.logger.debug('Message data with username merged', messageData);
@@ -108,10 +118,10 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * ルーム参加ハンドラー
    */
   private async handleJoinRoom(data: any, callback?: (response: any) => void): Promise<void> {
-    const { room, username } = data;
+    const { room } = data;
     
-    if (!room || !username) {
-      const errorResponse = this.createErrorResponse('Room and username are required');
+    if (!room) {
+      const errorResponse = this.createErrorResponse('Room is required');
       if (callback) callback(errorResponse);
       return;
     }
@@ -123,7 +133,7 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       // システムメッセージを作成
       await this.safeExecute(async () => {
         return await this.operation.create({
-          message: `${username} joined the room`,
+          message: `${this.socket.username} joined the room`,
           username: 'system',
           room: room,
           type: 'system' as MessageType
@@ -132,13 +142,18 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
 
       // ルームの他のメンバーに通知
       this.socket.to(room).emit('userJoined', {
-        username,
+        username: this.socket.username,
+        userId: this.socket.user?._id,
         room,
         timestamp: new Date()
       });
 
       // 成功レスポンス
-      const successResponse = this.createSuccessResponse({ room, username }, 'Successfully joined room');
+      const successResponse = this.createSuccessResponse({ 
+        room, 
+        username: this.socket.username,
+        userId: this.socket.user?._id 
+      }, 'Successfully joined room');
       if (callback) callback(successResponse);
 
     } catch (error) {
@@ -153,10 +168,10 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * ルーム退出ハンドラー
    */
   private async handleLeaveRoom(data: any, callback?: (response: any) => void): Promise<void> {
-    const { room, username } = data;
+    const { room } = data;
     
-    if (!room || !username) {
-      const errorResponse = this.createErrorResponse('Room and username are required');
+    if (!room) {
+      const errorResponse = this.createErrorResponse('Room is required');
       if (callback) callback(errorResponse);
       return;
     }
@@ -168,7 +183,7 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       // システムメッセージを作成
       await this.safeExecute(async () => {
         return await this.operation.create({
-          message: `${username} left the room`,
+          message: `${this.socket.username} left the room`,
           username: 'system',
           room: room,
           type: 'system' as MessageType
@@ -177,13 +192,18 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
 
       // ルームの他のメンバーに通知
       this.socket.to(room).emit('userLeft', {
-        username,
+        username: this.socket.username,
+        userId: this.socket.user?._id,
         room,
         timestamp: new Date()
       });
 
       // 成功レスポンス
-      const successResponse = this.createSuccessResponse({ room, username }, 'Successfully left room');
+      const successResponse = this.createSuccessResponse({ 
+        room, 
+        username: this.socket.username,
+        userId: this.socket.user?._id 
+      }, 'Successfully left room');
       if (callback) callback(successResponse);
 
     } catch (error) {
@@ -232,9 +252,9 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
     errors: any[];
   }> {
     // レート制限チェック
-    const username = data.username || this.socket.handshake.query.username;
+    const username = this.socket.username;
     if (username) {
-      const rateLimit = messageSchema.checkRateLimit(username as string, eventName);
+      const rateLimit = messageSchema.checkRateLimit(username, eventName);
       if (!rateLimit.allowed) {
         return {
           isValid: false,
@@ -270,10 +290,10 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * sendMessageイベントのバリデーション
    */
   private validateSendMessageData(data: any): { isValid: boolean; errors: any[] } {
-    // Socket接続時のusernameを使用
+    // 認証されたユーザー名を使用
     const validationData = {
       ...data,
-      username: data.username || this.socket.handshake.query.username
+      username: this.socket.username
     };
 
     const result = messageSchema.validate(validationData);
@@ -336,9 +356,9 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       }
     }
 
-    const username = data.username || this.socket.handshake.query.username;
+    const username = this.socket.username;
     if (!username || typeof username !== 'string') {
-      errors.push({ field: 'username', message: 'Username is required' });
+      errors.push({ field: 'username', message: 'User authentication required' });
     }
 
     return {

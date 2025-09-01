@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+        <link rel="stylesheet" href="/admin/style.css">
+</head>
+<body>
+    <div class="container">
+
+        <!-- 動的統計カード
+        <div class="stats-grid">
+            <% if (models && models.length > 0) { %>
+                <% models.forEach(function(model) { %>
+                    <% const modelStats = statistics[model.name]; %>
+                    <div class="stat-card" style="border-left-color: <%= model.color || '#667eea' %>">
+                        <h3 style="color: <%= model.color || '#667eea' %>">
+                            <% if (model.icon) { %><%= model.icon %> <% } %>
+                            <%= model.displayName %>統計
+                        </h3>
+                        <% if (modelStats) { %>
+                            <div class="stat-number"><%= modelStats.total || 0 %></div>
+                            <div class="stat-label">総<%= model.displayName %>数</div>
+                            <% if (model.hasStatistics && modelStats.totalUsers) { %>
+                                <div style="margin-top: 1rem;">
+                                    <div>新規登録（30日間）: <strong><%= modelStats.recentRegistrations || 0 %></strong></div>
+                                    <div>アクティブユーザー: <strong><%= modelStats.activeUsers || 0 %></strong></div>
+                                </div>
+                            <% } %>
+                        <% } else { %>
+                            <div class="error-message"><%= model.displayName %>統計を取得できませんでした</div>
+                        <% } %>
+                    </div>
+                <% }); %>
+            <% } else { %>
+                <div class="stat-card">
+                    <h3>データなし</h3>
+                    <div class="error-message">登録されたモデルがありません</div>
+                </div>
+            <% } %>
+            
+            <!-- 総合統計カード -->
+            <!-- <div class="stat-card" style="border-left-color: #28a745">
+                <h3 style="color: #28a745">📊 総合統計</h3>
+                <div class="stat-number"><%= totalModels || 0 %></div>
+                <div class="stat-label">登録モデル数</div>
+                <div style="margin-top: 1rem;">
+                    <div>データ更新: <strong><%= new Date(timestamp).toLocaleTimeString('ja-JP') %></strong></div>
+                </div>
+            </div>
+        </div> -->
+
+        <!-- Django Admin風 モデル一覧 -->
+        <div class="admin-models-grid">
+            <% if (models && models.length > 0) { %>
+                <% models.forEach(function(model) { %>
+                    <% const modelStats = statistics[model.name]; %>
+                    <div class="admin-model-card" onclick="loadModelData('<%= model.name %>', '<%= model.displayName %>')">
+                        <div class="admin-model-header" style="background-color: <%= model.color || '#667eea' %>">
+                            <div class="admin-model-icon">
+                                <%= model.icon || '📁' %>
+                            </div>
+                            <div class="admin-model-info">
+                                <h3><%= model.displayName %></h3>
+                                <span class="admin-model-count">
+                                    <%= (modelStats && modelStats.total) || 0 %> 件
+                                </span>
+                            </div>
+                        </div>
+                        <div class="admin-model-actions">
+                            <div class="admin-action-btn" onclick="event.stopPropagation(); loadModelData('<%= model.name %>', '<%= model.displayName %>')">
+                                📋 一覧表示
+                            </div>
+                            <% if (model.hasStatistics) { %>
+                                <div class="admin-action-btn" onclick="event.stopPropagation(); loadModelStats('<%= model.name %>', '<%= model.displayName %>')">
+                                    📊 統計情報
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                <% }); %>
+            <% } else { %>
+                <div class="admin-model-card">
+                    <div class="admin-model-header" style="background-color: #dc3545">
+                        <div class="admin-model-icon">⚠️</div>
+                        <div class="admin-model-info">
+                            <h3>モデルなし</h3>
+                            <span class="admin-model-count">0 件</span>
+                        </div>
+                    </div>
+                </div>
+            <% } %>
+        </div>
+
+        <!-- 2カラムレイアウト -->
+        <div class="admin-two-column">
+            <!-- データ表示エリア（左側） -->
+            <div class="admin-data-section">
+                <div class="admin-toolbar">
+                    <div class="admin-toolbar-title">
+                        <h2>📋 データ管理</h2>
+                        <span class="admin-toolbar-info">モデルを選択してデータを表示・操作してください</span>
+                    </div>
+                    <div class="admin-toolbar-actions">
+                        <button class="admin-toolbar-btn" onclick="loadAllStatistics()">
+                            📊 全統計
+                        </button>
+                        <button class="admin-toolbar-btn" onclick="loadModelInfo()">
+                            🔍 モデル情報
+                        </button>
+                        <button class="admin-toolbar-btn" onclick="refreshCurrentView()">
+                            🔄 更新
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="admin-data-content" id="data-table-content">
+                    <div class="admin-welcome">
+                        <div class="admin-welcome-icon">🏠</div>
+                        <h3>管理パネルへようこそ</h3>
+                        <p>上のモデルカードをクリックしてデータを表示してください</p>
+                        <% if (models && models.length > 0) { %>
+                            <div class="admin-welcome-models">
+                                <strong>利用可能なモデル:</strong>
+                                <div class="admin-welcome-tags">
+                                    <% models.forEach(function(model) { %>
+                                        <span class="admin-welcome-tag" style="background-color: <%= model.color || '#667eea' %>">
+                                            <% if (model.icon) { %><%= model.icon %> <% } %><%= model.displayName %>
+                                        </span>
+                                    <% }); %>
+                                </div>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 新規作成フォームエリア（右側） -->
+            <div class="admin-form-section">
+                <div class="admin-form-header">
+                    <h2>➕ 新規作成</h2>
+                    <span class="admin-form-info">モデルを選択してデータを作成してください</span>
+                </div>
+                
+                <div class="admin-form-content" id="create-form-content">
+                    <div class="admin-form-welcome">
+                        <div class="admin-form-welcome-icon">✨</div>
+                        <h3>新規データ作成</h3>
+                        <p>左側のモデルカードを選択すると、<br>作成フォームが表示されます</p>
+                        <% if (models && models.length > 0) { %>
+                            <div class="admin-form-models">
+                                <strong>作成可能なモデル:</strong>
+                                <div class="admin-form-tags">
+                                    <% models.filter(model => model.createEnabled).forEach(function(model) { %>
+                                        <button class="admin-form-tag" style="background-color: <%= model.color || '#667eea' %>" 
+                                                onclick="showCreateForm('<%= model.name %>', '<%= model.displayName %>')">
+                                            <% if (model.icon) { %><%= model.icon %> <% } %><%= model.displayName %>を作成
+                                        </button>
+                                    <% }); %>
+                                </div>
+                            </div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 動的モデル更新関数
+        async function refreshModel(modelName, displayName) {
+            try {
+                const response = await fetch(`/admin/api/${modelName}?limit=20`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    const container = document.getElementById(`${modelName}-content`);
+                    container.innerHTML = renderModelData(modelName, result.data);
+                }
+            } catch (error) {
+                console.error(`Error refreshing ${displayName}:`, error);
+            }
+        }
+
+        // 動的データ描画関数
+        function renderModelData(modelName, data) {
+            if (modelName === 'messages') {
+                return data.map(item => `
+                    <div class="message-item">
+                        <div class="message-header">
+                            <span class="message-user">${item.username || '不明'}</span>
+                            <span class="message-time">
+                                ${item.timestamp ? new Date(item.timestamp).toLocaleString('ja-JP') : '時刻不明'}
+                            </span>
+                        </div>
+                        <div class="message-content">${item.message || 'メッセージ内容なし'}</div>
+                        <span class="message-room">ルーム: ${item.room || 'general'}</span>
+                    </div>
+                `).join('');
+            } else if (modelName === 'rooms') {
+                return data.map(item => `
+                    <div class="room-item">
+                        <div class="room-info">
+                            <div class="room-name">
+                                ${item.name || '名前なし'}
+                                ${item.isDefault ? '<span class="badge default">デフォルト</span>' : ''}
+                                <span class="badge ${item.status === 'active' ? 'active' : 'archived'}">
+                                    ${item.status === 'active' ? 'アクティブ' : 'アーカイブ'}
+                                </span>
+                            </div>
+                            <div class="room-desc">${item.description || '説明なし'}</div>
+                        </div>
+                        <div class="room-stats">
+                            <div>タイプ: ${item.type || 'general'}</div>
+                            <div>メッセージ数: ${item.messageCount || 0}</div>
+                            <div>作成日: ${item.createdAt ? new Date(item.createdAt).toLocaleDateString('ja-JP') : '不明'}</div>
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                // 汎用データ表示
+                return data.map(item => `
+                    <div class="message-item">
+                        <div class="message-header">
+                            <span class="message-user">
+                                ${item.username || item.name || item.title || 'ID: ' + (item._id ? item._id.toString().slice(-6) : '不明')}
+                            </span>
+                            <span class="message-time">
+                                ${item.createdAt ? new Date(item.createdAt).toLocaleString('ja-JP') : 
+                                  item.timestamp ? new Date(item.timestamp).toLocaleString('ja-JP') : '時刻不明'}
+                            </span>
+                        </div>
+                        <div class="message-content">
+                            ${item.description || item.message || item.content || 'データ内容なし'}
+                        </div>
+                        ${item.status ? `<span class="message-room">ステータス: ${item.status}</span>` : ''}
+                    </div>
+                `).join('');
+            }
+        }
+
+        // 動的リフレッシュ関数（モデル名とディスプレイ名を受け取る）
+        function refreshユーザー(modelName) { refreshModel(modelName, 'ユーザー'); }
+        function refreshメッセージ(modelName) { refreshModel(modelName, 'メッセージ'); }
+        function refreshルーム(modelName) { refreshModel(modelName, 'ルーム'); }
+
+        // 後方互換性のため
+        function refreshMessages() { refreshModel('messages', 'メッセージ'); }
+        function refreshRooms() { refreshModel('rooms', 'ルーム'); }
+
+        // モデル別設定を保存するオブジェクト（ローカルストレージ対応）
+        const modelSettings = {};
+
+        // ローカルストレージから設定を読み込み
+        function loadModelSettings() {
+            try {
+                const saved = localStorage.getItem('adminPaginationSettings');
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    Object.assign(modelSettings, parsed);
+                    console.log('Loaded pagination settings from localStorage:', modelSettings);
+                }
+            } catch (error) {
+                console.warn('Failed to load pagination settings from localStorage:', error);
+            }
+        }
+
+        // ローカルストレージに設定を保存
+        function saveModelSettings() {
+            try {
+                localStorage.setItem('adminPaginationSettings', JSON.stringify(modelSettings));
+                console.log('Saved pagination settings to localStorage:', modelSettings);
+            } catch (error) {
+                console.warn('Failed to save pagination settings to localStorage:', error);
+            }
+        }
+
+        // ページ読み込み時に設定を復元
+        loadModelSettings();
+
+        // 動的モデルデータ表示関数（一覧とフォーム同時表示）
+        async function loadModelData(modelName, displayName, page = 1, itemsPerPage = null) {
+            // ページ番号を確実に数値に変換
+            const pageNumber = parseInt(page, 10) || 1;
+            const finalItemsPerPageNumber = itemsPerPage ? parseInt(itemsPerPage, 10) : null;
+            
+            // 既存の設定を取得または初期化
+            if (!modelSettings[modelName]) {
+                modelSettings[modelName] = { itemsPerPage: null };
+            }
+            
+            // itemsPerPageが指定されていない場合は既存の設定を使用
+            const finalItemsPerPage = finalItemsPerPageNumber || modelSettings[modelName].itemsPerPage;
+            
+            console.log(`Loading ${displayName} - Page: ${pageNumber} (original: ${page}, type: ${typeof page}), ItemsPerPage: ${finalItemsPerPage}, Saved settings:`, modelSettings[modelName]);
+            console.log(`API URL will be: /admin/api/${modelName}/paginated?page=${pageNumber}${finalItemsPerPage ? `&itemsPerPage=${finalItemsPerPage}` : ''}`);
+            
+            currentView = { type: 'model', modelName, displayName, page: pageNumber, itemsPerPage: finalItemsPerPage };
+            console.log('currentView updated:', currentView);
+            
+            const container = document.getElementById('data-table-content');
+            const formContainer = document.getElementById('create-form-content');
+            
+            // 両方にローディング表示
+            container.innerHTML = '<div class="loading">データを読み込み中...</div>';
+            formContainer.innerHTML = '<div class="loading">フォームを読み込み中...</div>';
+            
+            try {
+                // APIのURLを構築（itemsPerPageがある場合のみクエリパラメータに追加）
+                let apiUrl = `/admin/api/${modelName}/paginated?page=${pageNumber}`;
+                if (finalItemsPerPage) {
+                    apiUrl += `&itemsPerPage=${finalItemsPerPage}`;
+                }
+                console.log(`Final API URL: ${apiUrl}`);
+                
+                // ページネーション付きデータとフィールド情報を並列で取得
+                const [dataResponse, fieldsResponse, configResponse] = await Promise.all([
+                    fetch(apiUrl),
+                    fetch(`/admin/api/${modelName}/fields`),
+                    fetch(`/admin/api/${modelName}/pagination-config`)
+                ]);
+                
+                if (!dataResponse.ok) {
+                    throw new Error(`データ取得エラー: ${dataResponse.status}`);
+                }
+                
+                const [dataResult, fieldsResult, configResult] = await Promise.all([
+                    dataResponse.json(),
+                    fieldsResponse.ok ? fieldsResponse.json() : { success: false, error: 'フィールド情報なし' },
+                    configResponse.ok ? configResponse.json() : { success: false, error: '設定情報なし' }
+                ]);
+                
+                console.log(`${displayName} data loaded:`, dataResult);
+                console.log(`${displayName} fields loaded:`, fieldsResult);
+                console.log(`${displayName} config loaded:`, configResult);
+                
+                // 実際に使用されたitemsPerPageを保存
+                if (dataResult.pagination && dataResult.pagination.itemsPerPage) {
+                    modelSettings[modelName].itemsPerPage = dataResult.pagination.itemsPerPage;
+                    currentView.itemsPerPage = dataResult.pagination.itemsPerPage;
+                    saveModelSettings(); // ローカルストレージに保存
+                }
+                
+                // ページネーション情報のデバッグ
+                if (dataResult.pagination) {
+                    console.log(`${displayName} pagination:`, dataResult.pagination);
+                    console.log('- totalItems:', dataResult.pagination.totalItems, typeof dataResult.pagination.totalItems);
+                    console.log('- totalPages:', dataResult.pagination.totalPages, typeof dataResult.pagination.totalPages);
+                    console.log('- currentPage:', dataResult.pagination.currentPage, typeof dataResult.pagination.currentPage);
+                    console.log('- itemsPerPage:', dataResult.pagination.itemsPerPage, typeof dataResult.pagination.itemsPerPage);
+                    
+                    // ページネーションオブジェクトの全プロパティを確認
+                    console.log('All pagination properties:', Object.keys(dataResult.pagination));
+                    console.log('Pagination object stringified:', JSON.stringify(dataResult.pagination, null, 2));
+                }
+                
+                // データ一覧を表示（ページネーション付き）
+                if (dataResult.success && dataResult.data) {
+                    container.innerHTML = generatePaginatedTableHTML(
+                        modelName, 
+                        displayName, 
+                        dataResult.data, 
+                        dataResult.pagination,
+                        configResult.success ? configResult.data : null
+                    );
+                } else {
+                    container.innerHTML = `<div class="error-message">${displayName}データの取得に失敗しました</div>`;
+                }
+                
+                // 作成フォームを表示（作成可能な場合のみ）
+                if (fieldsResult.success && fieldsResult.data && fieldsResult.data.length > 0) {
+                    displayUnifiedCreateForm(modelName, displayName, fieldsResult.data);
+                } else {
+                    // 作成フォームが利用できない場合の表示
+                    formContainer.innerHTML = `
+                        <div class="admin-form-welcome">
+                            <div class="admin-form-welcome-icon">📋</div>
+                            <h3>${displayName}を表示中</h3>
+                            <p>左側に${displayName}の一覧が表示されています</p>
+                            <div class="admin-form-info-card">
+                                <strong>このモデルは表示専用です</strong><br>
+                                新規作成機能は利用できません
+                            </div>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error(`Error loading ${displayName}:`, error);
+                container.innerHTML = `<div class="error-message">${displayName}データの取得に失敗しました: ${error.message}</div>`;
+                formContainer.innerHTML = `<div class="error-message">フォームの読み込みに失敗しました: ${error.message}</div>`;
+            }
+        }
+
+        // ページネーション対応テーブルHTML生成
+        function generatePaginatedTableHTML(modelName, displayName, data, pagination, config) {
+            if (data.length === 0) {
+                return `
+                    <div class="paginated-table-container">
+                        <div class="error-message">${displayName}データがありません</div>
+                    </div>
+                `;
+            }
+
+            const showId = config?.showId !== false;
+
+            // ヘッダー部分
+            const headerHTML = `
+                <div class="paginated-header">
+                    <h3>${displayName}一覧</h3>
+                    <div class="paginated-info">
+                        ${pagination ? `
+                            <span class="total-items">総件数: ${parseInt(pagination.totalItems) || 0}件</span>
+                            <span class="current-page">ページ ${parseInt(pagination.currentPage) || 1} / ${parseInt(pagination.totalPages) || 1}</span>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            let tableHTML = '';
+
+            // モデル固有のテーブル生成
+            if (modelName === 'auth') {
+                tableHTML = `
+                    <table class="data-table paginated-table">
+                        <thead>
+                            <tr>
+                                ${showId ? '<th>ID</th>' : ''}
+                                <th>ユーザー名</th>
+                                <th>登録日</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    ${showId ? `<td class="id-cell">${item._id}</td>` : ''}
+                                    <td><strong>${item.username}</strong></td>
+                                    <td>${formatDate(item.createdAt)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else if (modelName === 'messages') {
+                tableHTML = `
+                    <table class="data-table paginated-table">
+                        <thead>
+                            <tr>
+                                ${showId ? '<th>ID</th>' : ''}
+                                <th>ユーザー名</th>
+                                <th>メッセージ</th>
+                                <th>ルーム</th>
+                                <th>タイプ</th>
+                                <th>送信日時</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    ${showId ? `<td class="id-cell">${item._id}</td>` : ''}
+                                    <td><strong>${item.username}</strong></td>
+                                    <td class="message-cell">${item.message}</td>
+                                    <td><span class="room-tag">${item.room}</span></td>
+                                    <td><span class="message-type-${item.type}">${item.type}</span></td>
+                                    <td>${formatDate(item.timestamp)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else if (modelName === 'rooms') {
+                tableHTML = `
+                    <table class="data-table paginated-table">
+                        <thead>
+                            <tr>
+                                ${showId ? '<th>ID</th>' : ''}
+                                <th>ルーム名</th>
+                                <th>説明</th>
+                                <th>タイプ</th>
+                                <th>ステータス</th>
+                                <th>メッセージ数</th>
+                                <th>最終アクティビティ</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    ${showId ? `<td class="id-cell">${item._id}</td>` : ''}
+                                    <td><strong>${item.name}</strong></td>
+                                    <td class="description-cell">${item.description || '-'}</td>
+                                    <td><span class="room-type-${item.type}">${item.type}</span></td>
+                                    <td><span class="room-status-${item.status}">${item.status}</span></td>
+                                    <td class="count-cell">${item.messageCount || 0}</td>
+                                    <td>${formatDate(item.lastActivity)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                // 汎用テーブル生成
+                const keys = Object.keys(data[0] || {}).filter(key => !['__v', 'password'].includes(key));
+                if (showId && !keys.includes('_id')) {
+                    keys.unshift('_id');
+                }
+                
+                tableHTML = `
+                    <table class="data-table paginated-table">
+                        <thead>
+                            <tr>
+                                ${keys.map(key => `<th>${key === '_id' ? 'ID' : key}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    ${keys.map(key => {
+                                        const value = item[key];
+                                        const cellClass = key === '_id' ? 'id-cell' : '';
+                                        return `<td class="${cellClass}">${formatCellValue(value, key)}</td>`;
+                                    }).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+
+            // ページネーション部分
+            const paginationHTML = pagination ? generatePaginationHTML(modelName, displayName, pagination) : '';
+            
+            console.log(`generatePaginatedTableHTML - Generated paginationHTML length: ${paginationHTML.length}`);
+            if (paginationHTML.length > 0) {
+                console.log(`generatePaginatedTableHTML - PaginationHTML preview:`, paginationHTML.substring(0, 200) + '...');
+            }
+
+            const finalHTML = `
+                <div class="paginated-table-container">
+                    ${headerHTML}
+                    ${tableHTML}
+                    ${paginationHTML}
+                </div>
+            `;
+            
+            console.log(`generatePaginatedTableHTML - Final HTML length: ${finalHTML.length}`);
+            return finalHTML;
+        }
+
+        // 動的テーブルHTML生成（後方互換性）
+        function generateTableHTML(modelName, displayName, data) {
+            if (data.length === 0) {
+                return `<div class="error-message">${displayName}データがありません</div>`;
+            }
+
+            // モデル固有のテーブル生成
+            if (modelName === 'auth') {
+                return `
+                    <h3>${displayName}一覧 (${data.length}件)</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ユーザー名</th>
+                                <th>作成日</th>
+                                <th>更新日</th>
+                                <th>ID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    <td>${item.username || '不明'}</td>
+                                    <td>${item.createdAt ? new Date(item.createdAt).toLocaleString('ja-JP') : '不明'}</td>
+                                    <td>${item.updatedAt ? new Date(item.updatedAt).toLocaleString('ja-JP') : '不明'}</td>
+                                    <td style="font-family: monospace; font-size: 0.8rem;">${item._id || '不明'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else if (modelName === 'messages') {
+                return `
+                    <h3>${displayName}一覧 (${data.length}件)</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ユーザー名</th>
+                                <th>メッセージ</th>
+                                <th>ルーム</th>
+                                <th>タイプ</th>
+                                <th>時刻</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    <td>${item.username || '不明'}</td>
+                                    <td style="max-width: 300px; word-break: break-word;">${item.message || 'なし'}</td>
+                                    <td>${item.room || 'general'}</td>
+                                    <td>${item.type || 'text'}</td>
+                                    <td>${item.timestamp ? new Date(item.timestamp).toLocaleString('ja-JP') : '不明'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else if (modelName === 'rooms') {
+                return `
+                    <h3>${displayName}詳細 (${data.length}件)</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>名前</th>
+                                <th>説明</th>
+                                <th>タイプ</th>
+                                <th>ステータス</th>
+                                <th>メッセージ数</th>
+                                <th>デフォルト</th>
+                                <th>作成日</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    <td>${item.name || '名前なし'}</td>
+                                    <td style="max-width: 200px; word-break: break-word;">${item.description || 'なし'}</td>
+                                    <td>${item.type || 'general'}</td>
+                                    <td>
+                                        <span class="badge ${item.status === 'active' ? 'active' : 'archived'}">
+                                            ${item.status === 'active' ? 'アクティブ' : 'アーカイブ'}
+                                        </span>
+                                    </td>
+                                    <td>${item.messageCount || 0}</td>
+                                    <td>${item.isDefault ? 'はい' : 'いいえ'}</td>
+                                    <td>${item.createdAt ? new Date(item.createdAt).toLocaleString('ja-JP') : '不明'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } else {
+                // 汎用テーブル生成
+                const firstItem = data[0];
+                const columns = Object.keys(firstItem).filter(key => 
+                    !key.startsWith('__') && typeof firstItem[key] !== 'object' || key === '_id'
+                );
+                
+                return `
+                    <h3>${displayName}一覧 (${data.length}件)</h3>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                ${columns.map(col => `<th>${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.map(item => `
+                                <tr>
+                                    ${columns.map(col => `
+                                        <td style="${col === '_id' ? 'font-family: monospace; font-size: 0.8rem;' : ''}">
+                                            ${item[col] || '不明'}
+                                        </td>
+                                    `).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            }
+        }
+
+        // 全統計情報表示
+        async function loadAllStatistics() {
+            try {
+                const response = await fetch('/admin/api/statistics');
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    const container = document.getElementById('data-table-content');
+                    const stats = result.data;
+                    
+                    container.innerHTML = `
+                        <h3>📊 全統計情報</h3>
+                        <div style="display: grid; gap: 1rem; margin-top: 1rem;">
+                            ${Object.entries(stats).map(([modelName, data]) => `
+                                <div style="padding: 1rem; border: 1px solid #ddd; border-radius: 5px; background: #f9f9f9;">
+                                    <h4 style="color: ${data.color || '#667eea'}; margin-bottom: 0.5rem;">${data.name}</h4>
+                                    <div style="font-size: 1.5rem; font-weight: bold;">${data.total}</div>
+                                    ${data.recentRegistrations !== undefined ? `<div>新規登録（30日間）: ${data.recentRegistrations}</div>` : ''}
+                                    ${data.activeUsers !== undefined ? `<div>アクティブユーザー: ${data.activeUsers}</div>` : ''}
+                                    ${data.error ? `<div style="color: red;">エラー: ${data.error}</div>` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div style="margin-top: 1rem; color: #666;">
+                            最終更新: ${new Date(result.timestamp).toLocaleString('ja-JP')}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+                document.getElementById('data-table-content').innerHTML = '<div class="error-message">統計情報の取得に失敗しました</div>';
+            }
+        }
+
+        // モデル情報表示
+        async function loadModelInfo() {
+            try {
+                const response = await fetch('/admin/api/models');
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    const container = document.getElementById('data-table-content');
+                    container.innerHTML = `
+                        <h3>🔍 登録モデル情報 (${result.data.length}件)</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>モデル名</th>
+                                    <th>表示名</th>
+                                    <th>統計機能</th>
+                                    <th>検索機能</th>
+                                    <th>カラー</th>
+                                    <th>アイコン</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${result.data.map(model => `
+                                    <tr>
+                                        <td style="font-family: monospace;">${model.name}</td>
+                                        <td>${model.displayName}</td>
+                                        <td>
+                                            <span class="badge ${model.hasStatistics ? 'active' : 'archived'}">
+                                                ${model.hasStatistics ? 'あり' : 'なし'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="badge ${model.hasSearch ? 'active' : 'archived'}">
+                                                ${model.hasSearch ? 'あり' : 'なし'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <div style="display: flex; align-items: center;">
+                                                <div style="width: 20px; height: 20px; background-color: ${model.color || '#667eea'}; border-radius: 3px; margin-right: 0.5rem;"></div>
+                                                ${model.color || '#667eea'}
+                                            </div>
+                                        </td>
+                                        <td style="font-size: 1.2rem;">${model.icon || '—'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error loading model info:', error);
+                document.getElementById('data-table-content').innerHTML = '<div class="error-message">モデル情報の取得に失敗しました</div>';
+            }
+        }
+
+        // モデル統計表示
+        async function loadModelStats(modelName, displayName) {
+            try {
+                const response = await fetch(`/admin/api/${modelName}/stats`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    const container = document.getElementById('data-table-content');
+                    const stats = result.data;
+                    
+                    container.innerHTML = `
+                        <div style="text-align: center; margin-bottom: 2rem;">
+                            <h3>📊 ${displayName} 統計情報</h3>
+                        </div>
+                        <div style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+                            <div style="padding: 1.5rem; border: 1px solid #dee2e6; border-radius: 8px; background: #f8f9fa; text-align: center;">
+                                <div style="font-size: 2.5rem; font-weight: bold; color: #007bff; margin-bottom: 0.5rem;">
+                                    ${stats.total || 0}
+                                </div>
+                                <div style="color: #6c757d;">総${displayName}数</div>
+                            </div>
+                            ${stats.totalUsers ? `
+                                <div style="padding: 1.5rem; border: 1px solid #dee2e6; border-radius: 8px; background: #f8f9fa; text-align: center;">
+                                    <div style="font-size: 2rem; font-weight: bold; color: #28a745; margin-bottom: 0.5rem;">
+                                        ${stats.recentRegistrations || 0}
+                                    </div>
+                                    <div style="color: #6c757d;">新規登録（30日間）</div>
+                                </div>
+                                <div style="padding: 1.5rem; border: 1px solid #dee2e6; border-radius: 8px; background: #f8f9fa; text-align: center;">
+                                    <div style="font-size: 2rem; font-weight: bold; color: #ffc107; margin-bottom: 0.5rem;">
+                                        ${stats.activeUsers || 0}
+                                    </div>
+                                    <div style="color: #6c757d;">アクティブユーザー</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div style="margin-top: 2rem; text-align: center;">
+                            <button class="admin-toolbar-btn" onclick="loadModelData('${modelName}', '${displayName}')">
+                                📋 ${displayName}一覧を表示
+                            </button>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error(`Error loading ${displayName} stats:`, error);
+                document.getElementById('data-table-content').innerHTML = `<div class="error-message">${displayName}統計情報の取得に失敗しました</div>`;
+            }
+        }
+
+        // 現在のビューを更新
+        let currentView = { type: 'welcome' };
+        
+        function refreshCurrentView() {
+            if (currentView.type === 'model') {
+                loadModelData(currentView.modelName, currentView.displayName);
+            } else if (currentView.type === 'stats') {
+                loadModelStats(currentView.modelName, currentView.displayName);
+            } else if (currentView.type === 'allStats') {
+                loadAllStatistics();
+            } else if (currentView.type === 'modelInfo') {
+                loadModelInfo();
+            } else {
+                // ウェルカム画面に戻る
+                location.reload();
+            }
+        }
+
+        // ビュー追跡を更新
+        const originalLoadModelData = loadModelData;
+        loadModelData = function(modelName, displayName) {
+            currentView = { type: 'model', modelName, displayName };
+            return originalLoadModelData(modelName, displayName);
+        };
+
+        const originalLoadModelStats = loadModelStats;
+        loadModelStats = function(modelName, displayName) {
+            currentView = { type: 'stats', modelName, displayName };
+            return originalLoadModelStats(modelName, displayName);
+        };
+
+        const originalLoadAllStatistics = loadAllStatistics;
+        loadAllStatistics = function() {
+            currentView = { type: 'allStats' };
+            return originalLoadAllStatistics();
+        };
+
+        const originalLoadModelInfo = loadModelInfo;
+        loadModelInfo = function() {
+            currentView = { type: 'modelInfo' };
+            return originalLoadModelInfo();
+        };
+
+        // 統一された作成フォーム表示関数
+        function displayUnifiedCreateForm(modelName, displayName, fields) {
+            const container = document.getElementById('create-form-content');
+            container.innerHTML = generateUnifiedFormHTML(modelName, displayName, fields);
+            setupFormValidation(modelName);
+        }
+
+        // 動的フォーム表示（既存のスタンドアロン用、互換性維持）
+        async function showCreateForm(modelName, displayName) {
+            try {
+                const response = await fetch(`/admin/api/${modelName}/fields`);
+                const result = await response.json();
+                
+                if (result.success && result.data) {
+                    displayUnifiedCreateForm(modelName, displayName, result.data);
+                } else {
+                    console.error('Failed to load fields:', result);
+                }
+            } catch (error) {
+                console.error('Error loading create form:', error);
+                document.getElementById('create-form-content').innerHTML = 
+                    '<div class="form-error">フォームの読み込みに失敗しました</div>';
+            }
+        }
+
+        // 統一されたフォームHTML生成関数
+        function generateUnifiedFormHTML(modelName, displayName, fields) {
+            return `
+                <div class="unified-form">
+                    <div class="unified-form-header">
+                        <h3>✨ 新規${displayName}作成</h3>
+                        <div class="unified-form-badge">作成フォーム</div>
+                    </div>
+                    
+                    <form id="create-form-${modelName}" onsubmit="submitUnifiedForm(event, '${modelName}', '${displayName}')">
+                        <div class="unified-form-fields">
+                            ${fields.map(field => generateUnifiedFieldHTML(field)).join('')}
+                        </div>
+                        
+                        <div class="unified-form-actions">
+                            <button type="submit" class="unified-form-submit" id="submit-btn-${modelName}">
+                                <span class="button-icon">➕</span>
+                                ${displayName}を作成
+                            </button>
+                            <button type="button" class="unified-form-reset" onclick="resetUnifiedForm('${modelName}')">
+                                <span class="button-icon">🔄</span>
+                                リセット
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            `;
+        }
+
+        // 後方互換性のための旧関数
+        function generateFormHTML(modelName, displayName, fields) {
+            return generateUnifiedFormHTML(modelName, displayName, fields);
+        }
+
+        // 統一されたフィールドHTML生成関数
+        function generateUnifiedFieldHTML(field) {
+            const isRequired = field.required ? 'required' : '';
+            const requiredClass = field.required ? 'required' : '';
+            
+            let inputHTML = '';
+            
+            switch (field.type) {
+                case 'password':
+                    inputHTML = `<input type="password" class="unified-form-input" name="${field.name}" 
+                                        placeholder="${field.placeholder || ''}" ${isRequired}
+                                        ${field.minLength ? `minlength="${field.minLength}"` : ''}
+                                        ${field.maxLength ? `maxlength="${field.maxLength}"` : ''}>`;
+                    break;
+                case 'number':
+                    inputHTML = `<input type="number" class="unified-form-input" name="${field.name}" 
+                                        placeholder="${field.placeholder || ''}" ${isRequired}
+                                        ${field.min !== undefined ? `min="${field.min}"` : ''}
+                                        ${field.max !== undefined ? `max="${field.max}"` : ''}
+                                        value="${field.default || ''}">`;
+                    break;
+                case 'boolean':
+                    inputHTML = `<label class="unified-checkbox-label">
+                                    <input type="checkbox" class="unified-form-checkbox" name="${field.name}" 
+                                           ${field.default ? 'checked' : ''}>
+                                    <span class="unified-checkbox-text">${field.label}を有効にする</span>
+                                </label>`;
+                    break;
+                case 'date':
+                    inputHTML = `<input type="datetime-local" class="unified-form-input" name="${field.name}" ${isRequired}>`;
+                    break;
+                case 'enum':
+                    inputHTML = `<select class="unified-form-select" name="${field.name}" ${isRequired}>
+                                    ${!field.required ? '<option value="">選択してください</option>' : ''}
+                                    ${field.enum.map(option => 
+                                        `<option value="${option}" ${field.default === option ? 'selected' : ''}>${option}</option>`
+                                    ).join('')}
+                                </select>`;
+                    break;
+                default: // string
+                    inputHTML = `<input type="text" class="unified-form-input" name="${field.name}" 
+                                        placeholder="${field.placeholder || ''}" ${isRequired}
+                                        ${field.minLength ? `minlength="${field.minLength}"` : ''}
+                                        ${field.maxLength ? `maxlength="${field.maxLength}"` : ''}
+                                        value="${field.default || ''}">`;
+            }
+            
+            if (field.type === 'boolean') {
+                return `
+                    <div class="unified-form-group unified-form-group-checkbox">
+                        ${inputHTML}
+                        ${field.description ? `<div class="unified-form-description">${field.description}</div>` : ''}
+                    </div>
+                `;
+            }
+            
+            return `
+                <div class="unified-form-group">
+                    <label class="unified-form-label ${requiredClass}">${field.label || field.name}</label>
+                    ${inputHTML}
+                    ${field.description ? `<div class="unified-form-description">${field.description}</div>` : ''}
+                </div>
+            `;
+        }
+
+        // 後方互換性のための旧関数
+        function generateFieldHTML(field) {
+            return generateUnifiedFieldHTML(field);
+        }
+
+        // 統一されたフォーム送信関数
+        async function submitUnifiedForm(event, modelName, displayName) {
+            event.preventDefault();
+            
+            const form = event.target;
+            const submitBtn = document.getElementById(`submit-btn-${modelName}`);
+            const formData = new FormData(form);
+            
+            // フォームデータを整理
+            const data = {};
+            for (const [key, value] of formData.entries()) {
+                if (form.elements[key].type === 'checkbox') {
+                    data[key] = form.elements[key].checked;
+                } else if (form.elements[key].type === 'number') {
+                    data[key] = value ? Number(value) : undefined;
+                } else {
+                    data[key] = value || undefined;
+                }
+            }
+
+            // 空の値を除去
+            Object.keys(data).forEach(key => {
+                if (data[key] === undefined || data[key] === '') {
+                    delete data[key];
+                }
+            });
+
+            // ボタンの状態を変更
+            const originalHTML = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="button-icon">⏳</span>作成中...';
+
+            try {
+                const response = await fetch(`/admin/api/${modelName}/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 成功メッセージを表示
+                    showUnifiedSuccessMessage(displayName, result.data._id);
+                    
+                    // フォームをリセット
+                    form.reset();
+                    
+                    // 左側のデータを更新（関数を呼び直して最新データを取得）
+                    refreshDataOnly(modelName, displayName);
+                    
+                } else {
+                    throw new Error(result.error || 'Creation failed');
+                }
+            } catch (error) {
+                console.error('Error creating data:', error);
+                showUnifiedErrorMessage(error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHTML;
+            }
+        }
+
+        // 後方互換性のための旧関数
+        async function submitCreateForm(event, modelName, displayName) {
+            return submitUnifiedForm(event, modelName, displayName);
+        }
+
+        // フォームバリデーション設定
+        function setupFormValidation(modelName) {
+            const form = document.getElementById(`create-form-${modelName}`);
+            if (!form) return;
+
+            const inputs = form.querySelectorAll('.unified-form-input, .unified-form-select, .form-input, .form-select');
+            inputs.forEach(input => {
+                input.addEventListener('blur', function() {
+                    validateField(this);
+                });
+                
+                input.addEventListener('input', function() {
+                    clearFieldError(this);
+                });
+            });
+        }
+
+        // 個別フィールドバリデーション
+        function validateField(field) {
+            const value = field.value;
+            const required = field.hasAttribute('required');
+            
+            if (required && !value) {
+                showFieldError(field, 'この項目は必須です');
+                return false;
+            }
+            
+            if (field.type === 'email' && value && !isValidEmail(value)) {
+                showFieldError(field, '有効なメールアドレスを入力してください');
+                return false;
+            }
+            
+            clearFieldError(field);
+            return true;
+        }
+
+        // フィールドエラー表示
+        function showFieldError(field, message) {
+            clearFieldError(field);
+            field.classList.add('error');
+            
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'form-error';
+            errorDiv.textContent = message;
+            field.parentNode.appendChild(errorDiv);
+        }
+
+        // フィールドエラークリア
+        function clearFieldError(field) {
+            field.classList.remove('error');
+            const errorDiv = field.parentNode.querySelector('.form-error');
+            if (errorDiv) {
+                errorDiv.remove();
+            }
+        }
+
+        // 統一されたメッセージ表示関数
+        function showUnifiedSuccessMessage(displayName, id) {
+            const container = document.getElementById('create-form-content');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'unified-success-message';
+            messageDiv.innerHTML = `
+                <div class="unified-message-icon">✅</div>
+                <div class="unified-message-text">
+                    <strong>${displayName}が正常に作成されました！</strong>
+                    <small>ID: ${id}</small>
+                </div>
+            `;
+            
+            container.insertBefore(messageDiv, container.firstChild);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 4000);
+        }
+
+        function showUnifiedErrorMessage(errorMessage) {
+            const container = document.getElementById('create-form-content');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'unified-error-message';
+            messageDiv.innerHTML = `
+                <div class="unified-message-icon">❌</div>
+                <div class="unified-message-text">
+                    <strong>作成に失敗しました</strong>
+                    <small>${errorMessage}</small>
+                </div>
+            `;
+            
+            container.insertBefore(messageDiv, container.firstChild);
+            
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        // データのみを更新する関数（ページネーション対応）
+        async function refreshDataOnly(modelName, displayName) {
+            const currentPage = parseInt(currentView?.page, 10) || 1;
+            const currentItemsPerPage = modelSettings[modelName]?.itemsPerPage || currentView?.itemsPerPage || null;
+            
+            console.log(`refreshDataOnly called - currentView:`, currentView);
+            console.log(`refreshDataOnly using currentPage: ${currentPage} (type: ${typeof currentPage}), itemsPerPage: ${currentItemsPerPage}`);
+            
+            try {
+                // APIのURLを構築（itemsPerPageがある場合のみクエリパラメータに追加）
+                let apiUrl = `/admin/api/${modelName}/paginated?page=${currentPage}`;
+                if (currentItemsPerPage) {
+                    apiUrl += `&itemsPerPage=${currentItemsPerPage}`;
+                }
+                
+                const [dataResponse, configResponse] = await Promise.all([
+                    fetch(apiUrl),
+                    fetch(`/admin/api/${modelName}/pagination-config`)
+                ]);
+
+                if (dataResponse.ok) {
+                    const [dataResult, configResult] = await Promise.all([
+                        dataResponse.json(),
+                        configResponse.ok ? configResponse.json() : { success: false }
+                    ]);
+
+                    if (dataResult.success && dataResult.data) {
+                        const container = document.getElementById('data-table-content');
+                        container.innerHTML = generatePaginatedTableHTML(
+                            modelName, 
+                            displayName, 
+                            dataResult.data, 
+                            dataResult.pagination,
+                            configResult.success ? configResult.data : null
+                        );
+                    }
+                }
+            } catch (error) {
+                console.error(`Error refreshing ${displayName} data:`, error);
+            }
+        }
+
+        // 統一されたフォームリセット関数
+        function resetUnifiedForm(modelName) {
+            const form = document.getElementById(`create-form-${modelName}`);
+            if (form) {
+                form.reset();
+                // フォームエラーをクリア
+                form.querySelectorAll('.unified-form-input, .unified-form-select').forEach(input => {
+                    clearFieldError(input);
+                });
+            }
+        }
+
+        // フォーム選択画面に戻る（後方互換性）
+        function resetCreateForm() {
+            const container = document.getElementById('create-form-content');
+            const welcomeContent = `
+                <div class="admin-form-welcome">
+                    <div class="admin-form-welcome-icon">✨</div>
+                    <h3>新規データ作成</h3>
+                    <p>左側のモデルカードを選択すると、<br>作成フォームが表示されます</p>
+                </div>
+            `;
+            container.innerHTML = welcomeContent;
+        }
+
+        // 高機能ページネーションHTML生成
+        function generatePaginationHTML(modelName, displayName, pagination) {
+            console.log('generatePaginationHTML called with:', { modelName, displayName, pagination });
+            console.log('Pagination object type:', typeof pagination);
+            console.log('Pagination object keys:', Object.keys(pagination || {}));
+            console.log('Pagination object stringified:', JSON.stringify(pagination, null, 2));
+            
+            if (!pagination) {
+                console.warn('No pagination data provided');
+                return '';
+            }
+            
+            // 数値型に変換して安全性を確保
+            const currentPage = parseInt(pagination.currentPage) || 1;
+            const totalPages = parseInt(pagination.totalPages) || 1;
+            const totalItems = parseInt(pagination.totalItems) || 0;
+            const itemsPerPage = parseInt(pagination.itemsPerPage) || 10;
+            
+            console.log(`Pagination values - currentPage: ${currentPage} (original: ${pagination.currentPage}), totalPages: ${totalPages}, totalItems: ${totalItems}, itemsPerPage: ${itemsPerPage}`);
+            console.log(`Raw pagination values - currentPage: ${pagination.currentPage}, totalPages: ${pagination.totalPages}, totalItems: ${pagination.totalItems}, itemsPerPage: ${pagination.itemsPerPage}`);
+            
+            if (totalPages <= 1 && totalItems <= itemsPerPage) {
+                return `
+                    <div class="pagination-container">
+                        <div class="pagination-info">
+                            <span>総 ${totalItems} 件を表示</span>
+                        </div>
+                        <div class="pagination-controls">
+                            <div class="pagination-settings">
+                                ${generateItemsPerPageSelector(modelName, displayName, itemsPerPage)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const hasNext = pagination.hasNext || currentPage < totalPages;
+            const hasPrev = pagination.hasPrev || currentPage > 1;
+            
+            // ページ番号の範囲を計算（より詳細な表示）
+            let startPage = Math.max(1, currentPage - 3);
+            let endPage = Math.min(totalPages, currentPage + 3);
+            
+            // 最低7ページは表示（可能な場合）
+            if (endPage - startPage < 6) {
+                if (startPage === 1) {
+                    endPage = Math.min(totalPages, startPage + 6);
+                } else if (endPage === totalPages) {
+                    startPage = Math.max(1, endPage - 6);
+                }
+            }
+
+            const pageNumbers = [];
+            for (let i = startPage; i <= endPage; i++) {
+                pageNumbers.push(i);
+            }
+
+            return `
+                <div class="pagination-container" id="pagination-${modelName}">
+                    <div class="pagination-info">
+                        <span>総 ${totalItems} 件中 ${((currentPage - 1) * itemsPerPage) + 1} - ${Math.min(currentPage * itemsPerPage, totalItems)} 件を表示</span>
+                    </div>
+                    
+                    <div class="pagination-main-controls">
+                        <!-- ナビゲーションボタン -->
+                        <div class="pagination-nav-controls">
+                            <button class="pagination-btn nav-btn ${!hasPrev ? 'disabled' : ''}" 
+                                    onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', 1)" 
+                                    ${!hasPrev ? 'disabled' : ''}
+                                    title="最初のページへ">
+                                ⏪
+                            </button>
+                            <button class="pagination-btn nav-btn ${!hasPrev ? 'disabled' : ''}" 
+                                    onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', ${currentPage - 1})" 
+                                    ${!hasPrev ? 'disabled' : ''}
+                                    title="前のページへ">
+                                ◀
+                            </button>
+                        </div>
+                        
+                        <!-- ページ番号表示 -->
+                        <div class="pagination-pages">
+                            ${startPage > 1 ? `
+                                <button class="pagination-btn page-btn" onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', 1)">1</button>
+                                ${startPage > 2 ? '<span class="pagination-ellipsis" onclick="event.stopPropagation(); showPageJump(\'${modelName}\', \'${displayName}\', 1, ${startPage - 1})">...</span>' : ''}
+                            ` : ''}
+                            
+                            ${pageNumbers.map(page => `
+                                <button class="pagination-btn page-btn ${page === currentPage ? 'active' : ''}" 
+                                        onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', ${page})"
+                                        title="ページ ${page}">
+                                    ${page}
+                                </button>
+                            `).join('')}
+                            
+                            ${endPage < totalPages ? `
+                                ${endPage < totalPages - 1 ? '<span class="pagination-ellipsis" onclick="event.stopPropagation(); showPageJump(\'${modelName}\', \'${displayName}\', ${endPage + 1}, ${totalPages})">...</span>' : ''}
+                                <button class="pagination-btn page-btn" onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', ${totalPages})">${totalPages}</button>
+                            ` : ''}
+                        </div>
+                        
+                        <!-- ナビゲーションボタン -->
+                        <div class="pagination-nav-controls">
+                            <button class="pagination-btn nav-btn ${!hasNext ? 'disabled' : ''}" 
+                                    onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', ${currentPage + 1})" 
+                                    ${!hasNext ? 'disabled' : ''}
+                                    title="次のページへ">
+                                ▶
+                            </button>
+                            <button class="pagination-btn nav-btn ${!hasNext ? 'disabled' : ''}" 
+                                    onclick="event.stopPropagation(); navigateToPage('${modelName}', '${displayName}', ${totalPages})" 
+                                    ${!hasNext ? 'disabled' : ''}
+                                    title="最後のページへ">
+                                ⏩
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 高度なコントロール -->
+                    <div class="pagination-advanced-controls">
+                        <!-- ページジャンプ -->
+                        <div class="pagination-jump">
+                            <input type="number" 
+                                   class="pagination-jump-input" 
+                                   id="page-jump-${modelName}"
+                                   min="1" 
+                                   max="${totalPages}" 
+                                   value="${currentPage}"
+                                   onkeypress="event.stopPropagation(); handlePageJumpKeypress(event, '${modelName}', '${displayName}')"
+                                   title="ページ番号を入力してEnterキー">
+                            <button class="pagination-jump-btn" 
+                                    onclick="event.stopPropagation(); jumpToPage('${modelName}', '${displayName}')"
+                                    title="指定ページへ移動">
+                                移動
+                            </button>
+                        </div>
+                        
+                        <!-- 件数選択 -->
+                        <div class="pagination-settings">
+                            ${generateItemsPerPageSelector(modelName, displayName, itemsPerPage)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 日付フォーマット関数
+        function formatDate(dateValue) {
+            if (!dateValue) return '-';
+            try {
+                return new Date(dateValue).toLocaleString('ja-JP', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            } catch (error) {
+                return dateValue.toString();
+            }
+        }
+
+        // セル値フォーマット関数
+        function formatCellValue(value, key) {
+            if (value === null || value === undefined) return '-';
+            
+            if (key === '_id') {
+                return value.toString().slice(-8); // IDの最後8文字を表示
+            }
+            
+            if (key.includes('Date') || key.includes('At') || key === 'timestamp' || key === 'lastActivity') {
+                return formatDate(value);
+            }
+            
+            if (typeof value === 'boolean') {
+                return value ? '✅' : '❌';
+            }
+            
+            if (typeof value === 'object') {
+                return JSON.stringify(value);
+            }
+            
+            const str = value.toString();
+            if (str.length > 50) {
+                return str.substring(0, 47) + '...';
+            }
+            
+            return str;
+        }
+
+        // ページ件数選択HTML生成
+        function generateItemsPerPageSelector(modelName, displayName, currentItemsPerPage) {
+            const options = [5, 10, 15, 20, 25, 50, 100];
+            return `
+                <label class="pagination-items-label">
+                    表示件数:
+                    <select class="pagination-items-select" 
+                            onchange="event.stopPropagation(); changeItemsPerPage('${modelName}', '${displayName}', this.value)">
+                        ${options.map(option => `
+                            <option value="${option}" ${option === currentItemsPerPage ? 'selected' : ''}>
+                                ${option}件
+                            </option>
+                        `).join('')}
+                    </select>
+                </label>
+            `;
+        }
+
+        // ページナビゲーション関数（設定を維持）
+        function navigateToPage(modelName, displayName, page) {
+            let pageNumber = parseInt(page, 10);
+            console.log(`navigateToPage called with: modelName=${modelName}, displayName=${displayName}, page=${page} (type: ${typeof page}) -> parsed: ${pageNumber}`);
+            
+            if (isNaN(pageNumber) || pageNumber < 1) {
+                console.error('Invalid page number:', page, '-> using page 1');
+                pageNumber = 1;
+            }
+            
+            // 現在の表示件数設定を維持
+            const currentItemsPerPage = modelSettings[modelName]?.itemsPerPage || null;
+            console.log(`Using itemsPerPage: ${currentItemsPerPage} for navigation`);
+            loadModelData(modelName, displayName, pageNumber, currentItemsPerPage);
+        }
+
+        // 件数変更時の処理
+        function changeItemsPerPage(modelName, displayName, newItemsPerPage) {
+            console.log(`Changing items per page to ${newItemsPerPage} for ${modelName}`);
+            // 設定を保存
+            if (!modelSettings[modelName]) {
+                modelSettings[modelName] = {};
+            }
+            modelSettings[modelName].itemsPerPage = parseInt(newItemsPerPage);
+            saveModelSettings(); // ローカルストレージに保存
+            
+            // 現在のページを1に戻してからロード
+            loadModelData(modelName, displayName, 1, parseInt(newItemsPerPage));
+        }
+
+        // 件数指定でのデータロード（統合版使用）
+        async function loadModelDataWithItemsPerPage(modelName, displayName, page = 1, itemsPerPage) {
+            // 統合された関数を使用
+            return loadModelData(modelName, displayName, page, itemsPerPage);
+        }
+
+        // ページジャンプ機能
+        function jumpToPage(modelName, displayName) {
+            const input = document.getElementById(`page-jump-${modelName}`);
+            const page = parseInt(input.value);
+            
+            if (page && page > 0) {
+                navigateToPage(modelName, displayName, page);
+            }
+        }
+
+        // ページジャンプのキープレス処理
+        function handlePageJumpKeypress(event, modelName, displayName) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                jumpToPage(modelName, displayName);
+            }
+        }
+
+        // ページジャンプダイアログ表示
+        function showPageJump(modelName, displayName, minPage, maxPage) {
+            const page = prompt(`ページ番号を入力してください（${minPage}-${maxPage}）:`, minPage);
+            if (page !== null) {
+                const pageNum = parseInt(page);
+                if (pageNum >= minPage && pageNum <= maxPage) {
+                    navigateToPage(modelName, displayName, pageNum);
+                } else {
+                    alert(`ページ番号は${minPage}から${maxPage}の間で入力してください。`);
+                }
+            }
+        }
+
+        // キーボードナビゲーション
+        document.addEventListener('keydown', function(event) {
+            // Ctrl + 矢印キーでページナビゲーション
+            if (event.ctrlKey && currentView && currentView.type === 'model') {
+                const { modelName, displayName, page } = currentView;
+                
+                switch(event.key) {
+                    case 'ArrowLeft':
+                        event.preventDefault();
+                        if (page > 1) {
+                            navigateToPage(modelName, displayName, page - 1);
+                        }
+                        break;
+                    case 'ArrowRight':
+                        event.preventDefault();
+                        // 次ページへ（制限チェックは関数内で行う）
+                        navigateToPage(modelName, displayName, page + 1);
+                        break;
+                    case 'Home':
+                        event.preventDefault();
+                        navigateToPage(modelName, displayName, 1);
+                        break;
+                    case 'End':
+                        event.preventDefault();
+                        // 最後のページへ（ページ情報が必要）
+                        const paginationContainer = document.getElementById(`pagination-${modelName}`);
+                        if (paginationContainer) {
+                            const lastPageBtn = paginationContainer.querySelector('.pagination-btn.page-btn:last-of-type');
+                            if (lastPageBtn) {
+                                const lastPage = parseInt(lastPageBtn.textContent);
+                                navigateToPage(modelName, displayName, lastPage);
+                            }
+                        }
+                        break;
+                }
+            }
+        });
+
+        // Email validation helper
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        // 後方互換性のための旧関数
+        function loadUsers() { loadModelData('auth', 'ユーザー'); }
+        function loadAllMessages() { loadModelData('messages', 'メッセージ'); }
+        function loadAllRooms() { loadModelData('rooms', 'ルーム'); }
+    </script>
+</body>
+</html>
