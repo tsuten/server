@@ -4,6 +4,7 @@ import mongoInstance from './src/services/mongo.js'
 import { CustomSocket } from './src/types/socket.js'
 import { MessageReceiver } from './src/receivers/messageReceiver.js'
 import RoomReceiver from './src/receivers/roomReceiver.js'
+import ChannelReceiver from './src/receivers/channelReceiver.js'
 import { createLogger, LogCategory } from './src/utils/consoleLog.js'
 import { authRoutes } from './src/api/auth.js'
 import { authOperation } from './src/operations/authOperation.js'
@@ -113,6 +114,19 @@ fastify.get('/api', async (req: any, reply: any) => {
             'updateRoom - ルーム情報を更新',
             'archiveRoom - ルームをアーカイブ',
             'getRoomStats - ルーム統計を取得',
+            'getChannels - チャンネル一覧を取得',
+            'createChannel - チャンネルを作成',
+            'getChannelInfo - チャンネル情報を取得',
+            'updateChannel - チャンネル情報を更新',
+            'deleteChannel - チャンネルを削除',
+            'getChannelHierarchy - チャンネル階層を取得',
+            'searchChannels - チャンネルを検索',
+            'getChannelStats - チャンネル統計を取得',
+            'updateChannelPosition - チャンネル位置を更新',
+            'moveChannelToCategory - チャンネルをカテゴリに移動',
+            'addUserAccess - ユーザーアクセスを追加',
+            'removeUserAccess - ユーザーアクセスを削除',
+            'getAccessibleChannels - アクセス可能なチャンネルを取得',
             'verify_auth - 認証状態を再確認'
           ],
           server: [
@@ -125,6 +139,15 @@ fastify.get('/api', async (req: any, reply: any) => {
             'roomUpdated - ルーム更新通知',
             'roomArchived - ルームアーカイブ通知',
             'forceLeaveRoom - 強制退出通知',
+            'channelCreated - チャンネル作成通知',
+            'channelUpdated - チャンネル更新通知',
+            'channelDeleted - チャンネル削除通知',
+            'channelPositionUpdated - チャンネル位置更新通知',
+            'channelMovedToCategory - チャンネルカテゴリ移動通知',
+            'channelAccessGranted - チャンネルアクセス許可通知',
+            'channelAccessRevoked - チャンネルアクセス削除通知',
+            'userJoinedChannel - ユーザーがチャンネルに参加',
+            'userLeftChannel - ユーザーがチャンネルから退出',
             'system - システムメッセージ（エラー含む）',
             'auth_verified - 認証確認完了'
           ]
@@ -238,6 +261,13 @@ const start = async (port: number) => {
           enableErrorHandling: true,
           enableValidation: true
         });
+
+        // ChannelReceiverを初期化
+        const channelReceiver = new ChannelReceiver(io, socket, {
+          enableLogging: true,
+          enableErrorHandling: true,
+          enableValidation: true
+        });
         
         // 接続成功の通知
         socket.emit('connected', {
@@ -271,6 +301,9 @@ const start = async (port: number) => {
           
           // RoomReceiverのリソースをクリーンアップ
           roomReceiver.cleanup();
+          
+          // ChannelReceiverのリソースをクリーンアップ
+          channelReceiver.cleanup();
         });
 
         // 認証情報再確認のイベント（オプション）
