@@ -5,6 +5,7 @@ import { CustomSocket } from './src/types/socket.js'
 import { MessageReceiver } from './src/receivers/messageReceiver.js'
 import RoomReceiver from './src/receivers/roomReceiver.js'
 import ChannelReceiver from './src/receivers/channelReceiver.js'
+import UserReceiver from './src/receivers/userReceiver.js'
 import { createLogger, LogCategory } from './src/utils/consoleLog.js'
 import { authRoutes } from './src/api/auth.js'
 import { authOperation } from './src/operations/authOperation.js'
@@ -127,6 +128,20 @@ fastify.get('/api', async (req: any, reply: any) => {
             'addUserAccess - ユーザーアクセスを追加',
             'removeUserAccess - ユーザーアクセスを削除',
             'getAccessibleChannels - アクセス可能なチャンネルを取得',
+            'getUserInfo - ユーザー情報を取得',
+            'createUser - ユーザーを作成',
+            'updateUser - ユーザー情報を更新',
+            'deleteUser - ユーザーを削除',
+            'searchUsers - ユーザーを検索',
+            'getOnlineUsers - オンラインユーザーを取得',
+            'getUsersByType - タイプ別ユーザーを取得',
+            'updateOnlineStatus - オンライン状態を更新',
+            'updateUserSettings - ユーザー設定を更新',
+            'updateUserType - ユーザータイプを更新',
+            'getUserStatistics - ユーザー統計を取得',
+            'getUsers - ユーザー一覧を取得',
+            'getUserByAuthId - 認証IDでユーザーを取得',
+            'getUserByEmail - メールアドレスでユーザーを検索',
             'verify_auth - 認証状態を再確認'
           ],
           server: [
@@ -148,6 +163,16 @@ fastify.get('/api', async (req: any, reply: any) => {
             'channelAccessRevoked - チャンネルアクセス削除通知',
             'userJoinedChannel - ユーザーがチャンネルに参加',
             'userLeftChannel - ユーザーがチャンネルから退出',
+            'userCreated - ユーザー作成通知',
+            'userUpdated - ユーザー更新通知',
+            'userDeleted - ユーザー削除通知',
+            'userOnlineStatusChanged - ユーザーオンライン状態変更通知',
+            'userTypeChanged - ユーザータイプ変更通知',
+            'userSettingsUpdated - ユーザー設定更新通知',
+            'userCameOnline - ユーザーがオンラインになった通知',
+            'userWentOffline - ユーザーがオフラインになった通知',
+            'userJoinedRoom - ユーザーがルームに参加した通知',
+            'userLeftRoom - ユーザーがルームから退出した通知',
             'system - システムメッセージ（エラー含む）',
             'auth_verified - 認証確認完了'
           ]
@@ -264,6 +289,13 @@ const start = async (port: number) => {
 
         // ChannelReceiverを初期化
         const channelReceiver = new ChannelReceiver(io, socket, {
+          enableLogging: true,
+          enableErrorHandling: true,
+          enableValidation: true
+        });
+        
+        // UserReceiverを初期化
+        const userReceiver = new UserReceiver(io, socket, {
           enableLogging: true,
           enableErrorHandling: true,
           enableValidation: true
