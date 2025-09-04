@@ -23,8 +23,11 @@ export async function serverRoutes(fastify: FastifyInstance) {
         description: body?.description,
         logo: body?.logo,
         language: body?.language,
-        max_members: body?.max_members,
-        categories: body?.categories
+        categories: body?.categories,
+        settings: body?.max_members ? {
+          is_private: body?.is_private || false,
+          max_members: body?.max_members
+        } : undefined
       });
 
       if (!result.success) {
@@ -70,8 +73,11 @@ export async function serverRoutes(fastify: FastifyInstance) {
         description: body?.description,
         logo: body?.logo,
         language: body?.language,
-        max_members: body?.max_members,
-        categories: body?.categories
+        categories: body?.categories,
+        settings: body?.max_members ? {
+          is_private: body?.is_private,
+          max_members: body?.max_members
+        } : undefined
       });
 
       if (!result.success) {
