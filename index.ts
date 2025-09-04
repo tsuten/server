@@ -6,14 +6,19 @@ import { MessageReceiver } from './src/receivers/messageReceiver.js'
 import RoomReceiver from './src/receivers/roomReceiver.js'
 import ChannelReceiver from './src/receivers/channelReceiver.js'
 import UserReceiver from './src/receivers/userReceiver.js'
+import ConnectionsReceiver from './src/receivers/connectionsReceiver.js'
+import { createPermissionReceiver, createRoleReceiver } from './src/receivers/permissionReceiver.js'
 import { createLogger, LogCategory } from './src/utils/consoleLog.js'
 import { authRoutes } from './src/api/auth.js'
+import { serverRoutes } from './src/api/server.js'
+import { setupRoutes } from './src/api/setup.js'
 import { authOperation } from './src/operations/authOperation.js'
 import { dataManagement } from './src/admin/DataManagement.js'
 import jwt from '@fastify/jwt'
 import view from '@fastify/view'
 import ejs from 'ejs'
 import path from 'path'
+import serverOperation from './src/operations/serverOperation.js'
 
 const fastify = Fastify()
 const startupLogger = createLogger(LogCategory.SYSTEM, 'ServerStartup')
@@ -40,6 +45,14 @@ fastify.register(view, {
 // 認証関連のルートを登録
 startupLogger.info('Registering auth routes at /api/auth')
 fastify.register(authRoutes, { prefix: '/api/auth' })
+
+// サーバー設定のルートを登録
+startupLogger.info('Registering server routes at /api/server')
+fastify.register(serverRoutes, { prefix: '/api/server' })
+
+// サーバー設定のルートを登録
+startupLogger.info('Registering server setup routes at /api/setup')
+fastify.register(setupRoutes, { prefix: '/api/setup' })
 
 // 管理パネルのルートを登録
 startupLogger.info('Registering admin panel routes at /admin')
@@ -226,6 +239,19 @@ const start = async (port: number) => {
           return;
         }
 
+        const serverResult = await serverOperation.get();
+        if (!serverResult.success || !serverResult.data) {
+          serverLogger.warn('Server not found, disconnecting user', { socketId: socket.id });
+          socket.emit('system', {
+            type: 'server_error',
+            error: 'Server not found, please complete the server setup first',
+            message: 'サーバーが見つかりません, サーバーのセットアップを完了してください',
+            timestamp: new Date()
+          });
+          socket.disconnect(true);
+          return;
+        }
+
         // トークンを検証してユーザー情報を取得
         const tokenResult = await authOperation.verifyJWTToken(token, fastify);
         
@@ -273,6 +299,12 @@ const start = async (port: number) => {
           socketId: socket.id 
         });
 
+        socket.emit('system', {
+          status: 'success',
+          message: '接続を開始しました',
+          timestamp: new Date()
+        });
+
         // MessageReceiverを初期化（新しいBaseReceiverベースの実装）
         const messageReceiver = new MessageReceiver(io, socket, {
           enableLogging: true,
@@ -296,6 +328,23 @@ const start = async (port: number) => {
         
         // UserReceiverを初期化
         const userReceiver = new UserReceiver(io, socket, {
+          enableLogging: true,
+          enableErrorHandling: true,
+          enableValidation: true
+        });
+        
+        // ConnectionsReceiverを初期化（接続数取得用）
+        const connectionsReceiver = new ConnectionsReceiver(io, socket);
+        
+        // PermissionReceiverを初期化
+        const permissionReceiver = createPermissionReceiver(io, socket, {
+          enableLogging: true,
+          enableErrorHandling: true,
+          enableValidation: true
+        });
+        
+        // RoleReceiverを初期化
+        const roleReceiver = createRoleReceiver(io, socket, {
           enableLogging: true,
           enableErrorHandling: true,
           enableValidation: true
@@ -336,6 +385,9 @@ const start = async (port: number) => {
           
           // ChannelReceiverのリソースをクリーンアップ
           channelReceiver.cleanup();
+
+          // ConnectionsReceiverのリソースをクリーンアップ
+          connectionsReceiver.cleanup();
         });
 
         // 認証情報再確認のイベント（オプション）
