@@ -240,7 +240,17 @@ export abstract class BaseReceiver<T extends BaseEntity, CreateData, UpdateData>
    * 特定のルームにメッセージを送信
    */
   protected emitToRoom(room: string, eventName: string, data: any): void {
+    this.logger.debug('emitToRoom called', { 
+      room, 
+      eventName, 
+      socketId: this.socket.id,
+      connectedSockets: this.io.sockets.adapter.rooms.get(room)?.size || 0,
+      allRooms: Array.from(this.io.sockets.adapter.rooms.keys())
+    });
+    
     this.io.to(room).emit(eventName, data);
+    
+    this.logger.debug('emitToRoom completed', { room, eventName });
   }
 
   /**
