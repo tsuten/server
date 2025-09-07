@@ -24,19 +24,17 @@ class MessageModelClass extends BaseModel<MessageDocument> {
         maxLength: 1000,
         minLength: 1
       },
-      username: {
+      senderId: {
         type: String,
         required: true,
         trim: true,
-        maxLength: 50,
-        minLength: 1
+        index: true // senderId別検索のパフォーマンス向上
       },
-      room: {
+      channelId: {
         type: String,
-        default: 'general',
+        required: true,
         trim: true,
-        maxLength: 100,
-        index: true // room別検索のパフォーマンス向上
+        index: true // channelId別検索のパフォーマンス向上
       },
       type: {
         type: String,
@@ -57,8 +55,8 @@ class MessageModelClass extends BaseModel<MessageDocument> {
    */
   private addMessageIndexes(): void {
     // 複合インデックスの追加（検索パフォーマンス向上）
-    this.addCustomIndex({ room: 1, timestamp: -1 }); // room別の時系列検索
-    this.addCustomIndex({ username: 1, timestamp: -1 }); // ユーザー別の時系列検索
+    this.addCustomIndex({ channelId: 1, timestamp: -1 }); // channelId別の時系列検索
+    this.addCustomIndex({ senderId: 1, timestamp: -1 }); // senderId別の時系列検索
     this.addCustomIndex({ type: 1 }); // タイプ別検索
     this.addCustomIndex({ message: 'text' }); // 全文検索用（オプション）
   }

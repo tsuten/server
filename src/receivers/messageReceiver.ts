@@ -11,6 +11,10 @@ import {
   MessageOperationInterface,
   MessageType
 } from '../types/message.js';
+import { userOperation } from '../operations/userOperation.js';
+import { channelOperation } from '../operations/channelOperation.js';
+import authOperation from '../operations/authOperation.js';
+import { joinUserToChannel, leaveUserFromChannel } from '../socket/joinChannelRooms.js';
 
 /**
  * MessageReceiver クラス
@@ -36,11 +40,11 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
     // メッセージ取得イベント
     this.addEventHandler('getMessages', this.handleGetMessages.bind(this));
     
-    // ルーム参加イベント
-    this.addEventHandler('joinRoom', this.handleJoinRoom.bind(this));
+    // チャンネル参加イベント
+    this.addEventHandler('joinChannel', this.handleJoinChannel.bind(this));
     
-    // ルーム退出イベント
-    this.addEventHandler('leaveRoom', this.handleLeaveRoom.bind(this));
+    // チャンネル退出イベント
+    this.addEventHandler('leaveChannel', this.handleLeaveChannel.bind(this));
     
     // メッセージ検索イベント
     this.addEventHandler('searchMessages', this.handleSearchMessages.bind(this));
@@ -56,7 +60,7 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
     this.logger.debug('handleSendMessage called', data);
     
     // 認証されたユーザー情報を使用してデータを補完
-    if (!this.socket.username || !this.socket.user) {
+    if (!this.socket.user) {
       const errorResponse = this.createErrorResponse('User not authenticated');
       this.logger.warn('Unauthenticated user tried to send message', { socketId: this.socket.id });
       this.socket.emit('messageError', errorResponse);
@@ -67,12 +71,31 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
     await this.safeExecute(async () => {
       this.logger.info('Starting message creation');
       
+      const senderId = String(this.socket.user!._id);
+      const channelId = data.channelId;
+
+      // senderIdの存在確認
+      const senderExists = await this.validateSenderExists(senderId);
+      if (!senderExists.isValid) {
+        return this.createErrorResult(senderExists.error || 'Sender validation failed');
+      }
+
+      // channelIdの存在確認
+      if (!channelId) {
+        return this.createErrorResult('Channel ID is required');
+      }
+
+      const channelExists = await this.validateChannelExists(channelId);
+      if (!channelExists.isValid) {
+        return this.createErrorResult(channelExists.error || 'Channel validation failed');
+      }
+      
       const messageData = {
         ...data,
-        username: this.socket.username // 認証されたユーザー名を使用
+        senderId: senderId // 認証されたユーザーIDを文字列として使用
       };
       
-      this.logger.debug('Message data with username merged', messageData);
+      this.logger.debug('Message data with senderId merged', messageData);
       
       // メッセージを作成
       const result = await this.operation.create(messageData);
@@ -80,17 +103,26 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       this.logger.debug('Operation create result', result);
       
       if (result.success && result.data) {
-        this.logger.info('Message created successfully, broadcasting', { 
+        this.logger.info('Message created successfully', { 
           messageId: result.data._id, 
-          room: result.data.room 
+          channelId: result.data.channelId 
         });
         
-        // 成功時は該当ルームの全クライアントにブロードキャスト
-        const room = result.data.room || 'general';
-        this.emitToRoom(room, 'newMessage', result.data);
+        // MessageSenderが非同期で通知を送信するため、ここでは即座の送信は行わない
+        this.logger.debug('Message creation completed, MessageSender will handle notifications', {
+          messageId: result.data._id,
+          channelId: result.data.channelId
+        });
         
-        // 送信者にも確認レスポンスを送信
+        // 送信者にのみ確認レスポンスを送信（これは重複しない）
+        this.logger.debug('Sending confirmation to message sender', { 
+          senderId: result.data.senderId,
+          socketId: this.socket.id 
+        });
+        
         this.emitToClient('messageSent', result.data);
+        
+        this.logger.debug('messageSent confirmation sent to sender');
       } else {
         this.logger.warn('Message creation failed', result.error);
       }
@@ -103,11 +135,17 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * メッセージ取得ハンドラー
    */
   private async handleGetMessages(data: any, callback?: (response: any) => void): Promise<void> {
-    const { room, limit = 50, skip = 0 } = data;
+    const { channelId, limit = 50, skip = 0 } = data;
     
     await this.safeExecute(async () => {
-      if (room) {
-        return await this.operation.findByRoom(room, { limit, skip });
+      if (channelId) {
+        // channelIdが指定されている場合は存在確認
+        const channelExists = await this.validateChannelExists(channelId);
+        if (!channelExists.isValid) {
+          return this.createErrorResult(channelExists.error || 'Channel not found');
+        }
+        
+        return await this.operation.findByChannel(channelId, { limit, skip });
       } else {
         return await this.operation.getLatest(limit);
       }
@@ -115,100 +153,131 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
   }
 
   /**
-   * ルーム参加ハンドラー
+   * チャンネル参加ハンドラー
    */
-  private async handleJoinRoom(data: any, callback?: (response: any) => void): Promise<void> {
-    const { room } = data;
+  private async handleJoinChannel(data: any, callback?: (response: any) => void): Promise<void> {
+    const { channelId } = data;
     
-    if (!room) {
-      const errorResponse = this.createErrorResponse('Room is required');
+    if (!channelId) {
+      const errorResponse = this.createErrorResponse('Channel ID is required');
       if (callback) callback(errorResponse);
       return;
     }
 
     try {
-      // ルームに参加
-      this.joinRoom(room);
+      // チャンネルの存在確認
+      const channelExists = await this.validateChannelExists(channelId);
+      if (!channelExists.isValid) {
+        const errorResponse = this.createErrorResponse(channelExists.error || 'Channel not found');
+        if (callback) callback(errorResponse);
+        return;
+      }
+
+      // チャンネルに参加
+      this.logger.info('User joining channel', { 
+        userId: this.socket.user?._id, 
+        channelId, 
+        socketId: this.socket.id 
+      });
       
-      // システムメッセージを作成
+      // 新しいjoinChannelRoomsの機能を使用
+      const joinSuccess = await joinUserToChannel(this.socket, channelId);
+      if (!joinSuccess) {
+        const errorResponse = this.createErrorResponse('Failed to join channel or access denied');
+        if (callback) callback(errorResponse);
+        return;
+      }
+      
+      this.logger.debug('User joined channel successfully', { 
+        channelId, 
+        socketRooms: Array.from(this.socket.rooms) 
+      });
+      
+      // システムメッセージを作成（システムアカウントのIDが必要）
       await this.safeExecute(async () => {
         return await this.operation.create({
-          message: `${this.socket.username} joined the room`,
-          username: 'system',
-          room: room,
+          message: `User joined the channel`,
+          senderId: 'system', // システムアカウントのID（文字列）
+          channelId: channelId,
           type: 'system' as MessageType
         });
       });
 
-      // ルームの他のメンバーに通知
-      this.socket.to(room).emit('userJoined', {
-        username: this.socket.username,
+      // チャンネルの他のメンバーに通知（channel:プレフィックス付きルーム名を使用）
+      const channelRoomName = `channel:${channelId}`;
+      this.socket.to(channelRoomName).emit('userJoined', {
         userId: this.socket.user?._id,
-        room,
+        channelId,
         timestamp: new Date()
       });
 
       // 成功レスポンス
       const successResponse = this.createSuccessResponse({ 
-        room, 
-        username: this.socket.username,
+        channelId,
         userId: this.socket.user?._id 
-      }, 'Successfully joined room');
+      }, 'Successfully joined channel');
       if (callback) callback(successResponse);
 
     } catch (error) {
       const errorResponse = this.createErrorResponse(
-        error instanceof Error ? error.message : 'Failed to join room'
+        error instanceof Error ? error.message : 'Failed to join channel'
       );
       if (callback) callback(errorResponse);
     }
   }
 
   /**
-   * ルーム退出ハンドラー
+   * チャンネル退出ハンドラー
    */
-  private async handleLeaveRoom(data: any, callback?: (response: any) => void): Promise<void> {
-    const { room } = data;
+  private async handleLeaveChannel(data: any, callback?: (response: any) => void): Promise<void> {
+    const { channelId } = data;
     
-    if (!room) {
-      const errorResponse = this.createErrorResponse('Room is required');
+    if (!channelId) {
+      const errorResponse = this.createErrorResponse('Channel ID is required');
       if (callback) callback(errorResponse);
       return;
     }
 
     try {
-      // ルームから退出
-      this.leaveRoom(room);
+      // チャンネルの存在確認
+      const channelExists = await this.validateChannelExists(channelId);
+      if (!channelExists.isValid) {
+        const errorResponse = this.createErrorResponse(channelExists.error || 'Channel not found');
+        if (callback) callback(errorResponse);
+        return;
+      }
+
+      // チャンネルから退出
+      leaveUserFromChannel(this.socket, channelId);
       
       // システムメッセージを作成
       await this.safeExecute(async () => {
         return await this.operation.create({
-          message: `${this.socket.username} left the room`,
-          username: 'system',
-          room: room,
+          message: `User left the channel`,
+          senderId: 'system', // システムアカウントのID（文字列）
+          channelId: channelId,
           type: 'system' as MessageType
         });
       });
 
-      // ルームの他のメンバーに通知
-      this.socket.to(room).emit('userLeft', {
-        username: this.socket.username,
+      // チャンネルの他のメンバーに通知（channel:プレフィックス付きルーム名を使用）
+      const channelRoomName = `channel:${channelId}`;
+      this.socket.to(channelRoomName).emit('userLeft', {
         userId: this.socket.user?._id,
-        room,
+        channelId,
         timestamp: new Date()
       });
 
       // 成功レスポンス
       const successResponse = this.createSuccessResponse({ 
-        room, 
-        username: this.socket.username,
+        channelId,
         userId: this.socket.user?._id 
-      }, 'Successfully left room');
+      }, 'Successfully left channel');
       if (callback) callback(successResponse);
 
     } catch (error) {
       const errorResponse = this.createErrorResponse(
-        error instanceof Error ? error.message : 'Failed to leave room'
+        error instanceof Error ? error.message : 'Failed to leave channel'
       );
       if (callback) callback(errorResponse);
     }
@@ -218,10 +287,18 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * メッセージ検索ハンドラー
    */
   private async handleSearchMessages(data: any, callback?: (response: any) => void): Promise<void> {
-    const { keyword, room, limit = 50 } = data;
+    const { keyword, channelId, limit = 50 } = data;
     
     await this.safeExecute(async () => {
-      return await this.operation.search(keyword, room, limit);
+      // channelIdが指定されている場合は存在確認
+      if (channelId) {
+        const channelExists = await this.validateChannelExists(channelId);
+        if (!channelExists.isValid) {
+          return this.createErrorResult(channelExists.error || 'Channel not found');
+        }
+      }
+
+      return await this.operation.search(keyword, channelId, limit);
     }, callback);
   }
 
@@ -229,14 +306,22 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * メッセージ履歴取得ハンドラー
    */
   private async handleGetMessageHistory(data: any, callback?: (response: any) => void): Promise<void> {
-    const { startDate, endDate, room } = data;
+    const { startDate, endDate, channelId } = data;
     
     await this.safeExecute(async () => {
+      // channelIdが指定されている場合は存在確認
+      if (channelId) {
+        const channelExists = await this.validateChannelExists(channelId);
+        if (!channelExists.isValid) {
+          return this.createErrorResult(channelExists.error || 'Channel not found');
+        }
+      }
+
       if (startDate && endDate) {
         return await this.operation.findByDateRange({
           startDate: new Date(startDate),
           endDate: new Date(endDate),
-          room
+          channelId
         });
       } else {
         return await this.operation.getLatest(50);
@@ -252,9 +337,9 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
     errors: any[];
   }> {
     // レート制限チェック
-    const username = this.socket.username;
-    if (username) {
-      const rateLimit = messageSchema.checkRateLimit(username, eventName);
+    const senderId = this.socket.user?._id;
+    if (senderId) {
+      const rateLimit = messageSchema.checkRateLimit(senderId, eventName);
       if (!rateLimit.allowed) {
         return {
           isValid: false,
@@ -271,9 +356,9 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       case 'getMessages':
         return this.validateGetMessagesData(data);
         
-      case 'joinRoom':
-      case 'leaveRoom':
-        return this.validateRoomActionData(data);
+      case 'joinChannel':
+      case 'leaveChannel':
+        return this.validateChannelActionData(data);
         
       case 'searchMessages':
         return this.validateSearchData(data);
@@ -290,10 +375,10 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
    * sendMessageイベントのバリデーション
    */
   private validateSendMessageData(data: any): { isValid: boolean; errors: any[] } {
-    // 認証されたユーザー名を使用
+    // 認証されたユーザーIDを文字列として使用
     const validationData = {
       ...data,
-      username: this.socket.username
+      senderId: String(this.socket.user?._id || '')
     };
 
     const result = messageSchema.validate(validationData);
@@ -322,14 +407,11 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       }
     }
 
-    if (data.room !== undefined) {
-      const allowedRooms = messageSchema.getAllowedRooms();
-      if (typeof data.room !== 'string' || !allowedRooms.includes(data.room)) {
-        errors.push({ 
-          field: 'room', 
-          message: `Invalid room. Allowed rooms: ${allowedRooms.join(', ')}` 
-        });
-      }
+    if (data.channelId !== undefined && typeof data.channelId !== 'string') {
+      errors.push({ 
+        field: 'channelId', 
+        message: 'Channel ID must be a string' 
+      });
     }
 
     return {
@@ -339,26 +421,19 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
   }
 
   /**
-   * ルーム参加/退出イベントのバリデーション
+   * チャンネル参加/退出イベントのバリデーション
    */
-  private validateRoomActionData(data: any): { isValid: boolean; errors: any[] } {
+  private validateChannelActionData(data: any): { isValid: boolean; errors: any[] } {
     const errors: any[] = [];
 
-    if (!data.room || typeof data.room !== 'string') {
-      errors.push({ field: 'room', message: 'Room name is required' });
-    } else {
-      const allowedRooms = messageSchema.getAllowedRooms();
-      if (!allowedRooms.includes(data.room)) {
-        errors.push({ 
-          field: 'room', 
-          message: `Invalid room. Allowed rooms: ${allowedRooms.join(', ')}` 
-        });
-      }
+    if (!data.channelId || typeof data.channelId !== 'string') {
+      errors.push({ field: 'channelId', message: 'Channel ID is required' });
     }
 
-    const username = this.socket.username;
-    if (!username || typeof username !== 'string') {
-      errors.push({ field: 'username', message: 'User authentication required' });
+    // Socket接続時に認証されたユーザー情報を使用
+    const userId = this.socket.user?._id;
+    if (!userId) {
+      errors.push({ field: 'userId', message: 'User authentication required' });
     }
 
     return {
@@ -381,14 +456,11 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       errors.push({ field: 'keyword', message: 'Search keyword must be at most 100 characters' });
     }
 
-    if (data.room !== undefined) {
-      const allowedRooms = messageSchema.getAllowedRooms();
-      if (typeof data.room !== 'string' || !allowedRooms.includes(data.room)) {
-        errors.push({ 
-          field: 'room', 
-          message: `Invalid room. Allowed rooms: ${allowedRooms.join(', ')}` 
-        });
-      }
+    if (data.channelId !== undefined && typeof data.channelId !== 'string') {
+      errors.push({ 
+        field: 'channelId', 
+        message: 'Channel ID must be a string' 
+      });
     }
 
     if (data.limit !== undefined) {
@@ -431,19 +503,86 @@ export class MessageReceiver extends BaseReceiver<MessageEntity, MessageCreateDa
       }
     }
 
-    if (data.room !== undefined) {
-      const allowedRooms = messageSchema.getAllowedRooms();
-      if (typeof data.room !== 'string' || !allowedRooms.includes(data.room)) {
-        errors.push({ 
-          field: 'room', 
-          message: `Invalid room. Allowed rooms: ${allowedRooms.join(', ')}` 
-        });
-      }
+    if (data.channelId !== undefined && typeof data.channelId !== 'string') {
+      errors.push({ 
+        field: 'channelId', 
+        message: 'Channel ID must be a string' 
+      });
     }
 
     return {
       isValid: errors.length === 0,
       errors
+    };
+  }
+
+  /**
+   * 送信者（ユーザー）の存在確認
+   */
+  private async validateSenderExists(senderId: string): Promise<{ isValid: boolean; error?: string }> {
+    try {
+      const userResult = await authOperation.findById(senderId);
+      
+      if (!userResult.success || !userResult.data) {
+        this.logger.warn('Sender not found', { senderId });
+        return {
+          isValid: false,
+          error: `Sender with ID ${senderId} not found`
+        };
+      }
+
+      this.logger.debug('Sender validation successful', {
+        senderId,
+        username: userResult.data.username
+      });
+
+      return { isValid: true };
+    } catch (error) {
+      this.logger.error('Error validating sender', error, { senderId });
+      return {
+        isValid: false,
+        error: 'Failed to validate sender'
+      };
+    }
+  }
+
+  /**
+   * チャンネルの存在確認
+   */
+  private async validateChannelExists(channelId: string): Promise<{ isValid: boolean; error?: string }> {
+    try {
+      const channelResult = await channelOperation.findById(channelId);
+      
+      if (!channelResult.success || !channelResult.data) {
+        this.logger.warn('Channel not found', { channelId });
+        return {
+          isValid: false,
+          error: `Channel with ID ${channelId} not found`
+        };
+      }
+
+      this.logger.debug('Channel validation successful', {
+        channelId,
+        channelName: channelResult.data.name
+      });
+
+      return { isValid: true };
+    } catch (error) {
+      this.logger.error('Error validating channel', error, { channelId });
+      return {
+        isValid: false,
+        error: 'Failed to validate channel'
+      };
+    }
+  }
+
+  /**
+   * エラー結果を作成するヘルパーメソッド
+   */
+  private createErrorResult(error: string) {
+    return {
+      success: false,
+      error
     };
   }
 }

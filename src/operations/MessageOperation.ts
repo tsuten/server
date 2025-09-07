@@ -12,6 +12,7 @@ import {
   DateRangeQuery
 } from '../types/message.js';
 import { OperationResult, QueryOptions } from '../types/base.js';
+import MessageSender from '../sender/messageSender.js';
 
 /**
  * メッセージ操作クラス
@@ -22,25 +23,34 @@ export class MessageOperation
   implements MessageOperationInterface {
 
   protected logger = createLogger(LogCategory.OPERATION, 'MessageOperation');
+  private messageSender?: MessageSender;
 
-  constructor() {
+  constructor(messageSender?: MessageSender) {
     super(MessageModel as any, messageSchema as any);
+    this.messageSender = messageSender;
   }
 
   /**
-   * 特定のルームのメッセージを取得
+   * MessageSenderを設定
    */
-  async findByRoom(room: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
+  setMessageSender(messageSender: MessageSender): void {
+    this.messageSender = messageSender;
+  }
+
+  /**
+   * 特定のチャンネルのメッセージを取得
+   */
+  async findByChannel(channelId: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
     try {
       const { limit = 50, skip = 0 } = options;
       
-      if (!room || typeof room !== 'string') {
-        return this.createErrorResult('Room name is required and must be a string');
+      if (!channelId || typeof channelId !== 'string') {
+        return this.createErrorResult('Channel ID is required and must be a string');
       }
 
-      const result = await messageRepository.findByRoom(room.trim(), { limit, skip });
+      const result = await messageRepository.findByChannel(channelId.trim(), { limit, skip });
       if (!result.success) {
-        return this.createErrorResult(result.error || 'Failed to get messages by room');
+        return this.createErrorResult(result.error || 'Failed to get messages by channel');
       }
       const messages = result.data;
       
@@ -49,31 +59,31 @@ export class MessageOperation
       
       return this.createSuccessResult(sortedMessages);
     } catch (error) {
-      console.error('Error getting messages by room:', error);
+      console.error('Error getting messages by channel:', error);
       return this.createErrorResult(error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
   /**
-   * 特定のユーザーのメッセージを取得
+   * 特定の送信者のメッセージを取得
    */
-  async findByUser(username: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
+  async findBySender(senderId: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
     try {
       const { limit = 50, skip = 0 } = options;
       
-      if (!username || typeof username !== 'string') {
-        return this.createErrorResult('Username is required and must be a string');
+      if (!senderId || typeof senderId !== 'string') {
+        return this.createErrorResult('Sender ID is required and must be a string');
       }
 
-      const result = await messageRepository.findByUser(username.trim(), { limit, skip });
+      const result = await messageRepository.findBySender(senderId.trim(), { limit, skip });
       if (!result.success) {
-        return this.createErrorResult(result.error || 'Failed to get messages by user');
+        return this.createErrorResult(result.error || 'Failed to get messages by sender');
       }
       const messages = result.data;
       
       return this.createSuccessResult(messages || [] as any);
     } catch (error) {
-      console.error('Error getting messages by user:', error);
+      console.error('Error getting messages by sender:', error);
       return this.createErrorResult(error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
@@ -83,7 +93,7 @@ export class MessageOperation
    */
   async findByDateRange(query: DateRangeQuery): Promise<OperationResult<MessageEntity[]>> {
     try {
-      const { startDate, endDate, room } = query;
+      const { startDate, endDate, channelId } = query;
       
       if (!startDate || !endDate) {
         return this.createErrorResult('Start date and end date are required');
@@ -93,7 +103,7 @@ export class MessageOperation
         return this.createErrorResult('Start date must be before end date');
       }
 
-      const result = await messageRepository.findByDateRange({ startDate, endDate, room });
+      const result = await messageRepository.findByDateRange({ startDate, endDate, channelId });
       if (!result.success) {
         return this.createErrorResult(result.error || 'Failed to get messages by date range');
       }
@@ -109,7 +119,7 @@ export class MessageOperation
   /**
    * キーワードでメッセージを検索
    */
-  async search(keyword: string, room?: string, limit: number = 50): Promise<OperationResult<MessageEntity[]>> {
+  async search(keyword: string, channelId?: string, limit: number = 50): Promise<OperationResult<MessageEntity[]>> {
     try {
       if (!keyword || typeof keyword !== 'string') {
         return this.createErrorResult('Search keyword is required and must be a string');
@@ -119,7 +129,7 @@ export class MessageOperation
         return this.createErrorResult('Search keyword must be at least 2 characters long');
       }
 
-      const result = await messageRepository.search(keyword.trim(), room, Math.min(limit, 100));
+      const result = await messageRepository.search(keyword.trim(), channelId, Math.min(limit, 100));
       if (!result.success) {
         return this.createErrorResult(result.error || 'Failed to search messages');
       }
@@ -156,9 +166,9 @@ export class MessageOperation
   /**
    * メッセージ数を取得
    */
-  async getMessageCount(room?: string): Promise<OperationResult<number>> {
+  async getMessageCount(channelId?: string): Promise<OperationResult<number>> {
     try {
-      const result = await messageRepository.getMessageCount(room);
+      const result = await messageRepository.getMessageCount(channelId);
       if (!result.success) {
         return this.createErrorResult(result.error || 'Failed to get message count');
       }
@@ -186,10 +196,16 @@ export class MessageOperation
     try {
       this.logger.debug('create called', data);
       
-      // usernameが必須でない場合のデフォルト設定
-      if (!data.username) {
-        this.logger.warn('Username missing, returning error');
-        return this.createErrorResult('Username is required for message creation');
+      // senderIdが必須でない場合のデフォルト設定
+      if (!data.senderId) {
+        this.logger.warn('SenderId missing, returning error');
+        return this.createErrorResult('SenderId is required for message creation');
+      }
+
+      // channelIdが必須でない場合のデフォルト設定
+      if (!data.channelId) {
+        this.logger.warn('ChannelId missing, returning error');
+        return this.createErrorResult('ChannelId is required for message creation');
       }
 
       // メッセージ固有のバリデーション
@@ -207,10 +223,24 @@ export class MessageOperation
       
       if (result.success && result.data) {
         this.logger.info('Message created successfully', {
-          username: data.username,
-          room: data.room || 'general',
+          senderId: data.senderId,
+          channelId: data.channelId,
           messageId: result.data._id
         });
+
+        // MessageSenderで通知を送信
+        if (this.messageSender) {
+          try {
+            this.logger.debug('Calling MessageSender.notifyNewMessage');
+            await this.messageSender.notifyNewMessage(result.data); // 送信者除外なし、全員に送信
+            this.logger.debug('MessageSender notification sent successfully');
+          } catch (senderError) {
+            // Senderのエラーは主処理に影響させない
+            this.logger.warn('MessageSender notification failed', senderError);
+          }
+        } else {
+          this.logger.warn('MessageSender not available, skipping notification');
+        }
       }
       
       return result;
@@ -240,11 +270,11 @@ export class MessageOperation
   }
 
   /**
-   * ルーム統計の取得（拡張機能）
+   * チャンネル統計の取得（拡張機能）
    */
-  async getRoomStatistics(room: string): Promise<OperationResult<{
+  async getChannelStatistics(channelId: string): Promise<OperationResult<{
     totalMessages: number;
-    uniqueUsers: number;
+    uniqueSenders: number;
     messagesByType: Record<MessageType, number>;
     lastActivity: Date | null;
   }>> {
@@ -254,17 +284,17 @@ export class MessageOperation
         messages,
         lastMessage
       ] = await Promise.all([
-        this.getMessageCount(room),
-        this.model.find({ room: room.trim() }).lean(),
-        this.model.findOne({ room: room.trim() }).sort({ timestamp: -1 }).lean()
+        this.getMessageCount(channelId),
+        this.model.find({ channelId: channelId.trim() }).lean(),
+        this.model.findOne({ channelId: channelId.trim() }).sort({ timestamp: -1 }).lean()
       ]);
 
       if (!totalMessages.success) {
         return this.createErrorResult('Failed to get message count');
       }
 
-      // ユニークユーザー数を計算
-      const uniqueUsers = new Set(messages.map(m => m.username)).size;
+      // ユニーク送信者数を計算
+      const uniqueSenders = new Set(messages.map(m => m.senderId)).size;
 
       // タイプ別メッセージ数を計算
       const messagesByType: Record<MessageType, number> = {
@@ -279,12 +309,12 @@ export class MessageOperation
 
       return this.createSuccessResult({
         totalMessages: totalMessages.data!,
-        uniqueUsers,
+        uniqueSenders,
         messagesByType,
         lastActivity: (lastMessage as any)?.timestamp || null
       });
     } catch (error) {
-      console.error('Error getting room statistics:', error);
+      console.error('Error getting channel statistics:', error);
       return this.createErrorResult(error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }

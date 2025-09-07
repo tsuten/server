@@ -25,37 +25,31 @@ export class MessageSchema extends BaseSchema<MessageCreateData> {
         return null;
       }
     },
-    username: {
-      required: true, // receiverでの検証では必須とする
+    senderId: {
+      required: true,
       type: 'string',
-      maxLength: 50,
       minLength: 1,
-      pattern: /^[a-zA-Z0-9_-]+$/, // 英数字、アンダースコア、ハイフンのみ
       custom: (value: string) => {
-        // 予約語チェック
-        const reservedWords = ['admin', 'system', 'bot', 'null', 'undefined'];
-        if (reservedWords.includes(value.toLowerCase())) {
+        // senderId の形式チェック（ObjectId形式など）
+        if (!value || value.trim().length === 0) {
           return {
-            field: 'username',
-            message: 'このユーザー名は使用できません'
+            field: 'senderId',
+            message: 'senderIdは必須です'
           };
         }
         return null;
       }
     },
-    room: {
-      required: false,
+    channelId: {
+      required: true,
       type: 'string',
-      maxLength: 100,
       minLength: 1,
-      default: 'general',
       custom: (value: string) => {
-        // 許可されたルーム名のチェック
-        const allowedRooms = this.getAllowedRooms();
-        if (!allowedRooms.includes(value)) {
+        // channelId の形式チェック（ObjectId形式など）
+        if (!value || value.trim().length === 0) {
           return {
-            field: 'room',
-            message: `許可されていないルームです。利用可能なルーム: ${allowedRooms.join(', ')}`
+            field: 'channelId',
+            message: 'channelIdは必須です'
           };
         }
         return null;
@@ -77,20 +71,13 @@ export class MessageSchema extends BaseSchema<MessageCreateData> {
   }
 
   /**
-   * usernameの必須設定を動的に変更
-   * Socket接続時など、外部からusernameが設定される場合に使用
+   * senderIdの必須設定を動的に変更
+   * Socket接続時など、外部からsenderIdが設定される場合に使用
    */
-  setUsernameRequired(required: boolean): void {
-    this.validationRules.username.required = required;
+  setSenderIdRequired(required: boolean): void {
+    this.validationRules.senderId.required = required;
   }
 
-  /**
-   * roomの一覧を取得（将来的に動的にする場合の準備）
-   */
-  getAllowedRooms(): string[] {
-    // 将来的にデータベースから取得するなど
-    return ['general', 'random', 'tech', 'help'];
-  }
 
   /**
    * メッセージ固有のカスタムバリデーション
@@ -137,22 +124,23 @@ export class MessageSchema extends BaseSchema<MessageCreateData> {
     switch (eventName) {
       case 'sendMessage':
         // メッセージ送信時は全フィールド必須
-        rules.username.required = true;
+        rules.senderId.required = true;
+        rules.channelId.required = true;
         rules.message.required = true;
         break;
         
-      case 'joinRoom':
-      case 'leaveRoom':
-        // ルーム参加/退出時はusernameとroomのみ必要
+      case 'joinChannel':
+      case 'leaveChannel':
+        // チャンネル参加/退出時はsenderIdとchannelIdのみ必要
         rules.message.required = false;
-        rules.username.required = true;
-        rules.room.required = true;
+        rules.senderId.required = true;
+        rules.channelId.required = true;
         break;
         
       case 'searchMessages':
         // 検索時はkeywordが必要（別途処理）
         rules.message.required = false;
-        rules.username.required = false;
+        rules.senderId.required = false;
         break;
     }
     
@@ -162,13 +150,13 @@ export class MessageSchema extends BaseSchema<MessageCreateData> {
   /**
    * レート制限チェック用のメソッド
    */
-  checkRateLimit(username: string, eventName: string): { allowed: boolean; message?: string } {
+  checkRateLimit(senderId: string, eventName: string): { allowed: boolean; message?: string } {
     // 実際の実装では Redis などを使用してレート制限を実装
     // ここでは簡易的な実装例
     
     const rateLimits: Record<string, { maxRequests: number; windowMs: number }> = {
       'sendMessage': { maxRequests: 10, windowMs: 60000 }, // 1分間に10メッセージ
-      'joinRoom': { maxRequests: 5, windowMs: 60000 }, // 1分間に5回まで
+      'joinChannel': { maxRequests: 5, windowMs: 60000 }, // 1分間に5回まで
       'searchMessages': { maxRequests: 20, windowMs: 60000 } // 1分間に20回まで
     };
     
@@ -201,8 +189,8 @@ export const messageSchema = new MessageSchema({
   stripUnknownFields: true,
   customErrorMessages: {
     'message_required': 'メッセージ内容は必須です',
-    'username_required': 'ユーザー名は必須です',
-    'room_required': 'ルーム名は必須です',
+    'senderId_required': 'senderIdは必須です',
+    'channelId_required': 'channelIdは必須です',
     'invalid_data_format': '無効なデータ形式です',
     'unknown_fields': '許可されていないフィールドが含まれています'
   }

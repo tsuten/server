@@ -11,9 +11,8 @@ export type MessageType = 'text' | 'system' | 'notification';
  */
 export interface MessageEntity extends BaseEntity {
   message: string;
-  username: string;
-  room: string;
-  type: MessageType;
+  senderId: string;
+  channelId: string;
 }
 
 /**
@@ -21,8 +20,8 @@ export interface MessageEntity extends BaseEntity {
  */
 export interface MessageCreateData {
   message: string;
-  username: string;
-  room?: string;
+  senderId: string;
+  channelId: string;
   type?: MessageType;
 }
 
@@ -31,15 +30,15 @@ export interface MessageCreateData {
  */
 export interface MessageUpdateData {
   message?: string;
-  // usernameやroomは変更不可とする
+  // senderIdやchannelIdは変更不可とする
 }
 
 /**
  * メッセージクエリオプションの定義
  */
 export interface MessageQueryOptions extends QueryOptions {
-  room?: string;
-  username?: string;
+  channelId?: string;
+  senderId?: string;
   startDate?: Date;
   endDate?: Date;
   keyword?: string;
@@ -52,7 +51,7 @@ export interface MessageQueryOptions extends QueryOptions {
 export interface DateRangeQuery {
   startDate: Date;
   endDate: Date;
-  room?: string;
+  channelId?: string;
 }
 
 /**
@@ -65,13 +64,13 @@ export interface MessageOperationInterface extends BaseOperationInterface<
   MessageUpdateData
 > {
   // Message固有のクエリメソッド
-  findByRoom(room: string, options?: QueryOptions): Promise<OperationResult<MessageEntity[]>>;
-  findByUser(username: string, options?: QueryOptions): Promise<OperationResult<MessageEntity[]>>;
+  findByChannel(channelId: string, options?: QueryOptions): Promise<OperationResult<MessageEntity[]>>;
+  findBySender(senderId: string, options?: QueryOptions): Promise<OperationResult<MessageEntity[]>>;
   findByDateRange(query: DateRangeQuery): Promise<OperationResult<MessageEntity[]>>;
-  search(keyword: string, room?: string, limit?: number): Promise<OperationResult<MessageEntity[]>>;
+  search(keyword: string, channelId?: string, limit?: number): Promise<OperationResult<MessageEntity[]>>;
   getLatest(limit?: number): Promise<OperationResult<MessageEntity[]>>;
   
   // 統計・集計メソッド
-  getMessageCount(room?: string): Promise<OperationResult<number>>;
+  getMessageCount(channelId?: string): Promise<OperationResult<number>>;
   getMessageTypes(): MessageType[];
 }

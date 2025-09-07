@@ -26,14 +26,17 @@ export class MessageRepository implements MessageOperationInterface {
         return this.createErrorResult('Message content is required');
       }
       
-      if (!data.username || data.username.trim().length === 0) {
-        return this.createErrorResult('Username is required');
+      if (!data.senderId || data.senderId.trim().length === 0) {
+        return this.createErrorResult('SenderId is required');
+      }
+
+      if (!data.channelId || data.channelId.trim().length === 0) {
+        return this.createErrorResult('ChannelId is required');
       }
 
       // デフォルト値の設定
       const messageData = {
         ...data,
-        room: data.room || 'general',
         type: data.type || 'text' as MessageType
       };
 
@@ -159,18 +162,18 @@ export class MessageRepository implements MessageOperationInterface {
   }
 
   /**
-   * 特定のルームのメッセージを取得
+   * 特定のチャンネルのメッセージを取得
    */
-  async findByRoom(room: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
+  async findByChannel(channelId: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
     try {
-      if (!room || typeof room !== 'string') {
-        return this.createErrorResult('Room name is required and must be a string');
+      if (!channelId || typeof channelId !== 'string') {
+        return this.createErrorResult('Channel ID is required and must be a string');
       }
 
       const { limit = 50, skip = 0 } = options;
       
       const messages = await MessageModel
-        .find({ room: room.trim() })
+        .find({ channelId: channelId.trim() })
         .sort({ timestamp: -1 })
         .limit(Math.min(limit, 100))
         .skip(skip)
@@ -181,24 +184,24 @@ export class MessageRepository implements MessageOperationInterface {
       
       return this.createSuccessResult(sortedMessages as MessageEntity[]);
     } catch (error) {
-      console.error('Error getting messages by room:', error);
+      console.error('Error getting messages by channel:', error);
       return this.createErrorResult(error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
 
   /**
-   * 特定のユーザーのメッセージを取得
+   * 特定の送信者のメッセージを取得
    */
-  async findByUser(username: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
+  async findBySender(senderId: string, options: QueryOptions = {}): Promise<OperationResult<MessageEntity[]>> {
     try {
-      if (!username || typeof username !== 'string') {
-        return this.createErrorResult('Username is required and must be a string');
+      if (!senderId || typeof senderId !== 'string') {
+        return this.createErrorResult('Sender ID is required and must be a string');
       }
 
       const { limit = 50, skip = 0 } = options;
       
       const messages = await MessageModel
-        .find({ username: username.trim() })
+        .find({ senderId: senderId.trim() })
         .sort({ timestamp: -1 })
         .limit(Math.min(limit, 100))
         .skip(skip)
@@ -206,7 +209,7 @@ export class MessageRepository implements MessageOperationInterface {
       
       return this.createSuccessResult(messages as MessageEntity[]);
     } catch (error) {
-      console.error('Error getting messages by user:', error);
+      console.error('Error getting messages by sender:', error);
       return this.createErrorResult(error instanceof Error ? error.message : 'Unknown error occurred');
     }
   }
@@ -216,7 +219,7 @@ export class MessageRepository implements MessageOperationInterface {
    */
   async findByDateRange(query: DateRangeQuery): Promise<OperationResult<MessageEntity[]>> {
     try {
-      const { startDate, endDate, room } = query;
+      const { startDate, endDate, channelId } = query;
       
       if (!startDate || !endDate) {
         return this.createErrorResult('Start date and end date are required');
@@ -233,8 +236,8 @@ export class MessageRepository implements MessageOperationInterface {
         }
       };
 
-      if (room) {
-        searchQuery.room = room.trim();
+      if (channelId) {
+        searchQuery.channelId = channelId.trim();
       }
 
       const messages = await MessageModel
@@ -252,7 +255,7 @@ export class MessageRepository implements MessageOperationInterface {
   /**
    * キーワードでメッセージを検索
    */
-  async search(keyword: string, room?: string, limit: number = 50): Promise<OperationResult<MessageEntity[]>> {
+  async search(keyword: string, channelId?: string, limit: number = 50): Promise<OperationResult<MessageEntity[]>> {
     try {
       if (!keyword || typeof keyword !== 'string') {
         return this.createErrorResult('Search keyword is required and must be a string');
@@ -266,8 +269,8 @@ export class MessageRepository implements MessageOperationInterface {
         message: { $regex: keyword.trim(), $options: 'i' }
       };
 
-      if (room) {
-        searchQuery.room = room.trim();
+      if (channelId) {
+        searchQuery.channelId = channelId.trim();
       }
 
       const messages = await MessageModel
@@ -307,9 +310,9 @@ export class MessageRepository implements MessageOperationInterface {
   /**
    * メッセージ数を取得
    */
-  async getMessageCount(room?: string): Promise<OperationResult<number>> {
+  async getMessageCount(channelId?: string): Promise<OperationResult<number>> {
     try {
-      const query = room ? { room: room.trim() } : {};
+      const query = channelId ? { channelId: channelId.trim() } : {};
       const count = await MessageModel.countDocuments(query);
       
       return this.createSuccessResult(count);
@@ -338,20 +341,16 @@ export class MessageRepository implements MessageOperationInterface {
         errors.push({ field: 'message', message: 'Message content is required' });
       }
 
-      if (!createData.username || typeof createData.username !== 'string' || createData.username.trim().length === 0) {
-        errors.push({ field: 'username', message: 'Username is required' });
+      if (!createData.senderId || typeof createData.senderId !== 'string' || createData.senderId.trim().length === 0) {
+        errors.push({ field: 'senderId', message: 'SenderId is required' });
+      }
+
+      if (!createData.channelId || typeof createData.channelId !== 'string' || createData.channelId.trim().length === 0) {
+        errors.push({ field: 'channelId', message: 'ChannelId is required' });
       }
 
       if (createData.message && createData.message.length > 1000) {
         errors.push({ field: 'message', message: 'Message content must be less than 1000 characters' });
-      }
-
-      if (createData.username && createData.username.length > 50) {
-        errors.push({ field: 'username', message: 'Username must be less than 50 characters' });
-      }
-
-      if (createData.room && createData.room.length > 100) {
-        errors.push({ field: 'room', message: 'Room name must be less than 100 characters' });
       }
 
       if (createData.type && !['text', 'system', 'notification'].includes(createData.type)) {
