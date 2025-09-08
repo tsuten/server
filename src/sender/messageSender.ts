@@ -28,10 +28,14 @@ export class MessageSender extends BaseSender {
     excludeUserId?: string,
     priority: SendPriority = SendPriority.HIGH
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['newMessage'] = {
-      message,
-      channelId: message.channelId,
-      senderId: message.senderId
+    const payload = {
+      data: {
+        message,
+        channelId: message.channelId,
+        senderId: message.senderId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Notifying new message', { 
@@ -46,9 +50,9 @@ export class MessageSender extends BaseSender {
     // チャンネル内の全ユーザーに送信（送信者は除外可能）
     if (excludeUserId) {
       // Socket.IOのbroadcast機能を使って送信者以外に送信
-      return this.sendToChannelExcludeUser(channelRoomName, 'newMessage', data, excludeUserId, priority);
+      return this.sendToChannelExcludeUser(channelRoomName, 'newMessage', payload, excludeUserId, priority);
     } else {
-      return this.sendToRoom(channelRoomName, 'newMessage', data, priority);
+      return this.sendToRoom(channelRoomName, 'newMessage', payload, priority);
     }
   }
 
@@ -62,17 +66,22 @@ export class MessageSender extends BaseSender {
     updatedBy: string,
     priority: SendPriority = SendPriority.NORMAL
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['messageUpdated'] = {
-      messageId,
-      updatedData,
-      updatedBy
+    const payload = {
+      data: {
+        messageId,
+        updatedData,
+        updatedBy,
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Notifying message updated', { messageId, channelId, updatedBy });
 
     // チャンネルルーム名を「channel:」プレフィックス付きに変換
     const channelRoomName = `channel:${channelId}`;
-    return this.sendToRoom(channelRoomName, 'messageUpdated', data, priority);
+    return this.sendToRoom(channelRoomName, 'messageUpdated', payload, priority);
   }
 
   /**
@@ -84,17 +93,21 @@ export class MessageSender extends BaseSender {
     deletedBy: string,
     priority: SendPriority = SendPriority.NORMAL
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['messageDeleted'] = {
-      messageId,
-      channelId,
-      deletedBy
+    const payload = {
+      data: {
+        messageId,
+        channelId,
+        deletedBy,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Notifying message deleted', { messageId, channelId, deletedBy });
 
     // チャンネルルーム名を「channel:」プレフィックス付きに変換
     const channelRoomName = `channel:${channelId}`;
-    return this.sendToRoom(channelRoomName, 'messageDeleted', data, priority);
+    return this.sendToRoom(channelRoomName, 'messageDeleted', payload, priority);
   }
 
   /**
@@ -105,17 +118,20 @@ export class MessageSender extends BaseSender {
     channelId: string,
     priority: SendPriority = SendPriority.NORMAL
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['channelJoined'] = {
-      userId,
-      channelId,
-      timestamp: new Date()
+    const payload = {
+      data: {
+        userId,
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Notifying channel joined', { userId, channelId });
 
     // チャンネルルーム名を「channel:」プレフィックス付きに変換
     const channelRoomName = `channel:${channelId}`;
-    return this.sendToRoom(channelRoomName, 'channelJoined', data, priority);
+    return this.sendToRoom(channelRoomName, 'channelJoined', payload, priority);
   }
 
   /**
@@ -126,17 +142,20 @@ export class MessageSender extends BaseSender {
     channelId: string,
     priority: SendPriority = SendPriority.NORMAL
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['channelLeft'] = {
-      userId,
-      channelId,
-      timestamp: new Date()
+    const payload = {
+      data: {
+        userId,
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Notifying channel left', { userId, channelId });
 
     // チャンネルルーム名を「channel:」プレフィックス付きに変換
     const channelRoomName = `channel:${channelId}`;
-    return this.sendToRoom(channelRoomName, 'channelLeft', data, priority);
+    return this.sendToRoom(channelRoomName, 'channelLeft', payload, priority);
   }
 
   /**
@@ -147,13 +166,17 @@ export class MessageSender extends BaseSender {
     channelId: string,
     priority: SendPriority = SendPriority.LOW
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['typingStarted'] = {
-      userId,
-      channelId
+    const payload = {
+      data: {
+        userId,
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     // タイピング通知は低優先度で、送信者以外に通知
-    return this.sendToChannelExcludeUser(channelId, 'typingStarted', data, userId, priority);
+    return this.sendToChannelExcludeUser(channelId, 'typingStarted', payload, userId, priority);
   }
 
   /**
@@ -164,13 +187,17 @@ export class MessageSender extends BaseSender {
     channelId: string,
     priority: SendPriority = SendPriority.LOW
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['typingStopped'] = {
-      userId,
-      channelId
+    const payload = {
+      data: {
+        userId,
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     // タイピング通知は低優先度で、送信者以外に通知
-    return this.sendToChannelExcludeUser(channelId, 'typingStopped', data, userId, priority);
+    return this.sendToChannelExcludeUser(channelId, 'typingStopped', payload, userId, priority);
   }
 
   /**
@@ -183,11 +210,15 @@ export class MessageSender extends BaseSender {
     channelId: string,
     priority: SendPriority = SendPriority.HIGH
   ): Promise<SendResult> {
-    const data: MessageSenderEvents['mentionNotification'] = {
-      mentionedUserId,
-      messageId,
-      senderId,
-      channelId
+    const payload = {
+      data: {
+        mentionedUserId,
+        messageId,
+        senderId,
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Notifying user mentioned', { 
@@ -198,7 +229,7 @@ export class MessageSender extends BaseSender {
     });
 
     // メンションは高優先度で個人に送信
-    return this.sendToUser(mentionedUserId, 'mentionNotification', data, priority);
+    return this.sendToUser(mentionedUserId, 'mentionNotification', payload, priority);
   }
 
   /**
@@ -211,7 +242,17 @@ export class MessageSender extends BaseSender {
   ): Promise<SendResult> {
     this.logger.debug('Confirming message sent', { senderId, messageId: message._id });
 
-    return this.sendToUser(senderId, 'messageSent', { message }, priority);
+    const payload = {
+      data: {
+        message,
+        senderId,
+        channelId: message.channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
+    };
+
+    return this.sendToUser(senderId, 'messageSent', payload, priority);
   }
 
   /**
@@ -281,7 +322,16 @@ export class MessageSender extends BaseSender {
   ): Promise<SendResult> {
     this.logger.debug('Sending message statistics', { targetUserId });
 
-    return this.sendToUser(targetUserId, 'messageStatistics', statistics, priority);
+    const payload = {
+      data: {
+        statistics,
+        targetUserId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
+    };
+
+    return this.sendToUser(targetUserId, 'messageStatistics', payload, priority);
   }
 
   /**
@@ -293,18 +343,21 @@ export class MessageSender extends BaseSender {
     messageType: 'info' | 'warning' | 'error' = 'info',
     priority: SendPriority = SendPriority.NORMAL
   ): Promise<SendResult> {
-    const data = {
-      message,
-      type: 'system',
-      messageType,
-      senderId: 'system',
-      channelId,
-      timestamp: new Date()
+    const payload = {
+      data: {
+        message,
+        type: 'system',
+        messageType,
+        senderId: 'system',
+        channelId,
+        timestamp: new Date(),
+        serverId: "unknown" // TODO: 適切なサーバーIDを設定
+      }
     };
 
     this.logger.info('Sending system message', { channelId, messageType, message });
 
-    return this.sendToRoom(channelId, 'systemMessage', data, priority);
+    return this.sendToRoom(channelId, 'systemMessage', payload, priority);
   }
 
   /**
